@@ -2,6 +2,7 @@ package message
 
 import (
 	"fmt"
+	"socketd/transport/core/constant"
 )
 
 type Frame struct {
@@ -16,6 +17,10 @@ func NewFrame(flag uint32, msg *Message) *Frame {
 		Flag:    flag,
 		Message: msg,
 	}
+}
+
+func (f *Frame) IsEnd() bool {
+	return f.Flag == constant.FrameReplyEnd
 }
 
 func (f *Frame) String() string {

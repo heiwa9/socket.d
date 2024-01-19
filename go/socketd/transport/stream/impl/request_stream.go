@@ -13,7 +13,7 @@ import (
 type RequestStream struct {
 	*StreamBase //继承
 
-	doOnReply func(message *message.Message)
+	doOnReply func(msg *message.Message)
 	replyChan chan *message.Message
 	done      bool
 }

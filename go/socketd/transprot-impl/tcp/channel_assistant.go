@@ -1,11 +1,13 @@
 package tcp
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"net"
 
 	"socketd/transport/core"
+	"socketd/transport/core/constant"
 	"socketd/transport/core/message"
 )
 
@@ -45,10 +47,17 @@ func (c *ChannelAssistant) Write(conn *net.TCPConn, frame *message.Frame) (err e
 func (c *ChannelAssistant) Read(conn *net.TCPConn) (*message.Frame, error) {
 	// 读缓冲
 	buf := make([]byte, c.Config.GetReadBufferSize())
-	n, err := conn.Read(buf)
+	_, err := conn.Read(buf[:4])
 	if err != nil {
 		slog.Warn(fmt.Sprintf("connect read error %s", err))
 		return nil, err
 	}
-	return c.Config.GetCodec().Decode(buf[:n]), nil
+	ml := binary.BigEndian.Uint32(buf[:4])
+	if ml > uint32(constant.MAX_SIZE_FRAME) {
+		slog.Warn(fmt.Sprintf("message length %d is too large", ml))
+		return nil, fmt.Errorf("message length %d is too large", ml)
+	}
+	conn.Read(buf[4:ml])
+
+	return c.Config.GetCodec().Decode(buf[:ml]), nil
 }

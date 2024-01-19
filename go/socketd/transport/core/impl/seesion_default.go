@@ -141,9 +141,19 @@ func (d *SessionDefault) SendAndRequest(event string, entity *message.Entity, ti
 	return stm, err
 }
 
-func (d *SessionDefault) SendAndSubscribe(event string, entity *message.Entity, timeout time.Duration) (stream stream.SubscribeStream, err error) {
-	panic("impl me")
-	return nil, nil
+func (d *SessionDefault) SendAndSubscribe(event string, entity *message.Entity, timeout time.Duration) (stream.SubscribeStream, error) {
+	if entity == nil {
+		entity = new(message.Entity)
+	}
+
+	var msg = message.NewMessage(d.GenerateId(), event, entity)
+	if timeout <= 0 {
+		timeout = d.channel.GetConfig().GetStreamTimeout()
+	}
+
+	var stm = impl.NewSubscribeStream(msg.Sid, timeout)
+	d.channel.Send(message.NewFrame(constant.FrameSubscribe, msg), stm)
+	return stm, nil
 }
 
 func (d *SessionDefault) Reply(from *message.Frame, entity *message.Entity) error {

@@ -87,8 +87,7 @@ func (c *ConfigBase) GetRequestTimeout() time.Duration {
 	return c.requestTimeout
 }
 func (c *ConfigBase) GetStreamTimeout() time.Duration {
-	//TODO implement me
-	panic("implement me")
+	return c.streamTimeout
 }
 func (c *ConfigBase) GetMaxUdpSize() int {
 	return c.maxUdpSize

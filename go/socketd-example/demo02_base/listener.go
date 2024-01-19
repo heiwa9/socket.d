@@ -39,13 +39,23 @@ func (l *MyListner) OnOpen(session core.Session) error {
 	fmt.Println("-> OnOpen")
 	return nil
 }
-func (l *MyListner) OnMessage(session core.Session, msg *message.Frame) error {
+func (l *MyListner) OnMessage(session core.Session, msg *message.Frame) (err error) {
 	fmt.Println("-> OnMessage")
 	if strings.HasPrefix(msg.Message.Event, "/demo") {
 
 		ent := message.NewEntity(nil, []byte("Nice to meet U :)"))
 
-		err := session.Reply(msg, ent)
+		err = session.Reply(msg, ent)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		err = session.Reply(msg, ent)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		err = session.ReplyEnd(msg, ent)
 		if err != nil {
 			fmt.Println(err)
 			return err

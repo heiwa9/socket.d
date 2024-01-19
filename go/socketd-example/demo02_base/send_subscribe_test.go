@@ -1,13 +1,14 @@
 package demo02_base
 
 import (
+	"fmt"
 	"socketd"
 	"socketd/transport/core/message"
 	"testing"
 	"time"
 )
 
-func TestDemo02Send(t *testing.T) {
+func TestSendAndSubscribe(t *testing.T) {
 	SetLog()
 
 	go func() {
@@ -29,5 +30,11 @@ func TestDemo02Send(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	clientSession.Send("/demo", message.NewEntity(nil, []byte("hello world!")))
+	subStream, err := clientSession.SendAndSubscribe("/demo", message.NewEntity(nil, []byte("hello world!")), 0)
+	if err != nil {
+		t.Error(err)
+	}
+	subStream.ThenReply(func(reply *message.Message) {
+		fmt.Println(reply)
+	})
 }

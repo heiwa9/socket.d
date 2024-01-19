@@ -1,11 +1,13 @@
 package ws
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"net"
 
 	"socketd/transport/core"
+	"socketd/transport/core/constant"
 	"socketd/transport/core/message"
 
 	"github.com/gorilla/websocket"
@@ -47,10 +49,17 @@ func (c *ChannelAssistant) Write(conn *websocket.Conn, frame *message.Frame) (er
 func (c *ChannelAssistant) Read(conn *websocket.Conn) (*message.Frame, error) {
 	// 读缓冲
 	buf := make([]byte, c.Config.GetReadBufferSize())
-	n, err := conn.NetConn().Read(buf)
+	_, err := conn.NetConn().Read(buf[:4])
 	if err != nil {
 		slog.Warn(fmt.Sprintf("connect read error %s", err))
 		return nil, err
 	}
-	return c.Config.GetCodec().Decode(buf[:n]), nil
+	ml := binary.BigEndian.Uint32(buf[:4])
+	if ml > uint32(constant.MAX_SIZE_FRAME) {
+		slog.Warn(fmt.Sprintf("message length %d is too large", ml))
+		return nil, fmt.Errorf("message length %d is too large", ml)
+	}
+	conn.NetConn().Read(buf[4:ml])
+
+	return c.Config.GetCodec().Decode(buf[:ml]), nil
 }
