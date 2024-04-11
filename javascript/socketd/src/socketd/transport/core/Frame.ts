@@ -1,7 +1,9 @@
 import {EntityDefault, StringEntity} from "./Entity";
-import {EntityMetas, Flags} from "./Constants";
+import {EntityMetas} from "./EntityMetas";
+import {Flags} from "./Flags";
 import {Message, MessageBuilder, MessageInternal} from "./Message";
 import {SocketD} from "../../SocketD";
+import {HandshakeInternal} from "./Handshake";
 
 /**
  * 帧（帧[消息[实体]]）
@@ -68,16 +70,17 @@ export class Frames {
     /**
      * 构建连接确认帧
      *
-     * @param connectMessage 连接消息
+     * @param handshake 握手信息
      */
-    static connackFrame(connectMessage: Message): Frame {
+    static connackFrame(handshake: HandshakeInternal): Frame {
         const entity = new EntityDefault();
         //添加框架版本号
+        entity.metaMapPut(handshake.getOutMetaMap());
         entity.metaPut(EntityMetas.META_SOCKETD_VERSION, SocketD.protocolVersion());
-        entity.dataSet(connectMessage.data().getArray()!);
+        entity.dataSet(handshake.getSource().data().getArray()!);
         return new Frame(Flags.Connack, new MessageBuilder()
-            .sid(connectMessage.sid())
-            .event(connectMessage.event()) //兼容旧版本（@deprecated 2.2.2）
+            .sid(handshake.getSource().sid())
+            .event(handshake.getSource().event()) //兼容旧版本（@deprecated 2.2.2）
             .entity(entity).build());
     }
 
@@ -98,8 +101,11 @@ export class Frames {
     /**
      * 构建关闭帧（一般用不到）
      */
-    static closeFrame(): Frame {
-        return new Frame(Flags.Close, null);
+    static closeFrame(code:number): Frame {
+        const message = new MessageBuilder();
+        message.entity(new StringEntity("").metaPut("code", code.toString()));
+
+        return new Frame(Flags.Close, message.build());
     }
 
     /**

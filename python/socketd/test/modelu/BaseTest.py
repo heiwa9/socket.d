@@ -1,8 +1,7 @@
-import uuid
 from websockets.legacy.server import WebSocketServer
 
 from socketd.transport.core.Session import Session
-from socketd.SocketD import SocketD
+from socketd import SocketD
 from socketd.transport.client.ClientConfig import ClientConfig
 from socketd.transport.server.ServerConfig import ServerConfig
 from socketd.transport.core.entity.StringEntity import StringEntity
@@ -22,17 +21,15 @@ class BaseTest:
         self.__c_lock = AtomicRefer(0)
 
     @classmethod
-    def s_config(cls, _config: ServerConfig) -> ServerConfig:
-        _config.id_generator(uuid.uuid4)
-        return _config
+    def s_config(cls, _config: ServerConfig):
+        ...
 
     @classmethod
-    def c_config(cls, _config: ClientConfig) -> ClientConfig:
-        _config.id_generator(uuid.uuid4)
-        return _config
+    def c_config(cls, _config: ClientConfig):
+        ...
 
     async def start(self):
-        self.__server: Server = SocketD.create_server(ServerConfig("ws").set_port(9999))
+        self.__server: Server = SocketD.create_server(ServerConfig("ws").port(9999))
         self.__server_session: WebSocketServer = await self.__server.config(self.s_config).listen(
             SimpleListenerTest()).start()
 

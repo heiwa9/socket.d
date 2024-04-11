@@ -20,14 +20,14 @@ public interface ClientSession extends Closeable {
     boolean isValid();
 
     /**
+     * 是否正在关闭中
+     */
+    boolean isClosing();
+
+    /**
      * 获取会话Id
      */
     String sessionId();
-
-    /**
-     * 手动重连（一般是自动）
-     */
-    void reconnect() throws IOException;
 
     /**
      * 发送
@@ -80,4 +80,30 @@ public interface ClientSession extends Closeable {
      * @return 流
      */
     SubscribeStream sendAndSubscribe(String event, Entity entity, long timeout) throws IOException;
+
+    /**
+     * 关闭开始
+     *
+     * @deprecated 2.4
+     */
+    @Deprecated
+    default void closeStarting() throws IOException{
+        preclose();
+    }
+
+    /**
+     * 预关闭（发送预关闭指令，通知对端不要再主动发消息过来了）
+     */
+    void preclose() throws IOException;
+
+    /**
+     * 关闭（发送关闭指令，并关闭连接）
+     */
+    void close() throws IOException;
+
+
+    /**
+     * 手动重连（一般是自动）
+     */
+    void reconnect() throws IOException;
 }

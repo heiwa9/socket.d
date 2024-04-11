@@ -1,10 +1,10 @@
 import asyncio
 import uuid
 
-from socketd.SocketD import SocketD
+from socketd import SocketD
 from socketd.transport.client.ClientConfig import ClientConfig
 from socketd.transport.core.Message import Message
-from socketd.transport.core.stream.SubscribeStream import SubscribeStream
+from socketd.transport.stream import SubscribeStream
 from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
 from test.modelu.BaseTestCase import BaseTestCase
 
@@ -19,12 +19,10 @@ from socketd.transport.core.Listener import Listener
 from loguru import logger
 
 
-def config_handler(config: ServerConfig | ClientConfig) -> ServerConfig | ClientConfig:
-    config.set_is_thread(False)
-    config.set_idle_timeout(10)
-    config.set_logger_level("DEBUG")
-    config.id_generator(uuid.uuid4)
-    return config
+def config_handler(config: ServerConfig | ClientConfig):
+    config.is_thread(False)
+    config.idle_timeout(10000)
+    config.logger_level("DEBUG")
 
 
 class SimpleListenerTest(Listener):
@@ -40,7 +38,7 @@ class SimpleListenerTest(Listener):
     async def on_message(self, session, message: Message):
         with self.server_counter:
             self.server_counter.set(self.server_counter.get() + 1)
-        logger.info(f"server::{message.get_data_as_string()} :: {message}")
+        logger.info(f"server::{message.data_as_string()} :: {message}")
         if message.is_subscribe():
             req: SubscribeStream = await session.send_and_subscribe("demo", StringEntity("今天不好"))
 
@@ -77,7 +75,7 @@ class ClientListenerTest(Listener):
         self.message_counter = AtomicRefer(0)
 
     async def on_message(self, session: Session, message: Message):
-        logger.info(f"client::  {message.get_data_as_string()} {message}")
+        logger.info(f"client::  {message.data_as_string()} {message}")
         if message.is_subscribe():
             await session.reply_end(message, StringEntity("你好"))
 
@@ -93,7 +91,7 @@ class TestCase12_sendAndSubscribe2rep(BaseTestCase):
 
     async def _start(self):
         s = SimpleListenerTest()
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).set_port(self.port))
+        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
         self.server_session: WebSocketServer = await self.server.config(config_handler).listen(
             s).start()
 
@@ -105,11 +103,11 @@ class TestCase12_sendAndSubscribe2rep(BaseTestCase):
         await asyncio.sleep(1)
 
         async def send_and_subscribe_test(entity):
-            logger.debug(f"c::subscribe::{entity.get_data_as_string()} {entity}")
+            logger.debug(f"c::subscribe::{entity.data_as_string()} {entity}")
 
         req: SubscribeStream = await self.client_session.send_and_subscribe("demo", StringEntity("hi"), 100)
         req.then_reply(send_and_subscribe_test)
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
 
     def start(self):
         super().start()

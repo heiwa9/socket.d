@@ -2,8 +2,10 @@ import {Listener, SimpleListener} from "./Listener";
 import type {ChannelInternal} from "./Channel";
 import type {Message} from "./Message";
 import type {Frame} from "./Frame";
-import {Constants, EntityMetas, Flags} from "./Constants";
-import {SocketdAlarmException, SocketdConnectionException} from "../../exception/SocketdException";
+import {Constants} from "./Constants";
+import {EntityMetas} from "./EntityMetas";
+import {Flags} from "./Flags";
+import {SocketDAlarmException, SocketDConnectionException} from "../../exception/SocketDException";
 import {HandshakeDefault} from "./HandshakeDefault";
 import {StreamInternal} from "../stream/Stream";
 
@@ -71,22 +73,32 @@ export class ProcessorDefault implements Processor {
     }
 
 
-    onReceive(channel: ChannelInternal, frame:Frame) {
-        // if (channel.getConfig().clientMode()) {
-        //     console.trace("C-REV:" + frame);
-        // } else {
-        //     console.trace("S-REV:" + frame);
-        // }
+    onReceive(channel: ChannelInternal, frame: Frame) {
+        if (channel.getConfig().clientMode()) {
+            //console.debug("C-REV:" + frame);
+        } else {
+            //只打印服务端的（客户端的容易被人看光）
+            console.debug("S-REV:" + frame);
+        }
 
         if (frame.flag() == Flags.Connect) {
             channel.setHandshake(new HandshakeDefault(frame.message()!));
             channel.onOpenFuture((r, err) => {
-                if (r && channel.isValid()) {
-                    //如果还有效，则发送链接确认
-                    try {
-                        channel.sendConnack(frame.message()!); //->Connack
-                    } catch (err) {
-                        this.onError(channel, err);
+                if (r) {
+                    //如果无异常
+                    if (channel.isValid()) {
+                        //如果还有效，则发送链接确认
+                        try {
+                            channel.sendConnack(); //->Connack
+                        } catch (err) {
+                            this.onError(channel, err);
+                        }
+                    }
+                }else{
+                    //如果有异常
+                    if (channel.isValid()) {
+                        //如果还有效，则关闭通道
+                        this.onCloseInternal(channel, Constants.CLOSE2001_ERROR);
                     }
                 }
             })
@@ -97,11 +109,11 @@ export class ProcessorDefault implements Processor {
             this.onOpen(channel);
         } else {
             if (channel.getHandshake() == null) {
-                channel.close(Constants.CLOSE1_PROTOCOL);
+                channel.close(Constants.CLOSE1001_PROTOCOL_CLOSE);
 
                 if (frame.flag() == Flags.Close) {
                     //说明握手失败了
-                    throw new SocketdConnectionException("Connection request was rejected");
+                    throw new SocketDConnectionException("Connection request was rejected");
                 }
 
                 console.warn(`${channel.getConfig().getRoleName()} channel handshake is null, sessionId=${channel.getSession().sessionId()}`);
@@ -122,13 +134,22 @@ export class ProcessorDefault implements Processor {
                     }
                     case Flags.Close: {
                         //关闭通道
-                        channel.close(Constants.CLOSE1_PROTOCOL);
-                        this.onCloseInternal(channel);
+                        let code = 0;
+
+                        if (frame.message() != null) {
+                            code = frame.message()!.metaAsInt("code");
+                        }
+
+                        if (code == 0) {
+                            code = Constants.CLOSE1001_PROTOCOL_CLOSE;
+                        }
+
+                        this.onCloseInternal(channel, code);
                         break;
                     }
                     case Flags.Alarm: {
                         //结束流，并异常通知
-                        const exception = new SocketdAlarmException(frame.message()!);
+                        const exception = new SocketDAlarmException(frame.message()!);
                         const stream = channel.getConfig().getStreamManger().getStream(frame.message()!.sid());
                         if (stream == null) {
                             this.onError(channel, exception);
@@ -138,6 +159,8 @@ export class ProcessorDefault implements Processor {
                         }
                         break;
                     }
+                    case Flags.Pressure: //预留
+                        break;
                     case Flags.Message:
                     case Flags.Request:
                     case Flags.Subscribe: {
@@ -150,8 +173,7 @@ export class ProcessorDefault implements Processor {
                         break;
                     }
                     default: {
-                        channel.close(Constants.CLOSE2_PROTOCOL_ILLEGAL);
-                        this.onCloseInternal(channel);
+                        this.onCloseInternal(channel, Constants.CLOSE1002_PROTOCOL_ILLEGAL);
                     }
                 }
             } catch (e) {
@@ -160,7 +182,7 @@ export class ProcessorDefault implements Processor {
         }
     }
 
-    onReceiveDo(channel: ChannelInternal, frame:Frame, isReply:boolean) {
+    onReceiveDo(channel: ChannelInternal, frame: Frame, isReply: boolean) {
         let stream: StreamInternal<any> | null = null;
         let streamIndex = 1;
         let streamTotal = 1;
@@ -183,7 +205,7 @@ export class ProcessorDefault implements Processor {
                 }
 
                 if (frameNew == null) {
-                    if(stream){
+                    if (stream) {
                         stream.onProgress(false, streamIndex, streamTotal);
                     }
                     return;
@@ -195,7 +217,7 @@ export class ProcessorDefault implements Processor {
 
         //执行接收处理
         if (isReply) {
-            if(stream){
+            if (stream) {
                 stream.onProgress(false, streamIndex, streamTotal);
             }
             channel.retrieve(frame, stream);
@@ -226,13 +248,17 @@ export class ProcessorDefault implements Processor {
     }
 
     onClose(channel: ChannelInternal) {
-        if (channel.isClosed() == 0) {
-            this.onCloseInternal(channel);
+        if (channel.isClosed() <= Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+            this.onCloseInternal(channel, Constants.CLOSE2003_DISCONNECTION);
         }
     }
 
-    onCloseInternal(channel: ChannelInternal) {
-        this._listener.onClose(channel.getSession())
+    onCloseInternal(channel: ChannelInternal, code: number) {
+        channel.close(code);
+
+        if (code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+            this._listener.onClose(channel.getSession());
+        }
     }
 
     onError(channel: ChannelInternal, error: any) {

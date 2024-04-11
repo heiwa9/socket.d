@@ -3,9 +3,11 @@ import type { ClientConfig } from "../transport/client/ClientConfig";
 import type { ClientSession } from "../transport/client/ClientSession";
 import type { Listener } from "../transport/core/Listener";
 import type { Session } from "../transport/core/Session";
-import type { IoConsumer } from "../transport/core/Typealias";
+import type {IoConsumer, IoFunction} from "../transport/core/Typealias";
 import {ClusterClientSession} from "./ClusterClientSession";
 import {SocketD} from "../SocketD";
+import type {ClientConnector} from "../transport/client/ClientConnector";
+import {ChannelInternal} from "../transport/core/Channel";
 
 /**
  * 集群客户端
@@ -15,6 +17,7 @@ import {SocketD} from "../SocketD";
 export class ClusterClient implements Client {
     private _serverUrls: string[];
 
+    private _connectHandler : IoFunction<ClientConnector, Promise<ChannelInternal>>;
     private _heartbeatHandler: IoConsumer<Session>;
     private _configHandler: IoConsumer<ClientConfig>;
     private _listener: Listener;
@@ -25,6 +28,11 @@ export class ClusterClient implements Client {
         } else {
             this._serverUrls = [serverUrls];
         }
+    }
+
+    connectHandler(connectHandler: IoFunction<ClientConnector, Promise<ChannelInternal>>) {
+        this._connectHandler = connectHandler;
+        return this;
     }
 
     heartbeatHandler(heartbeatHandler: IoConsumer<Session>): Client {
@@ -48,10 +56,18 @@ export class ClusterClient implements Client {
         return this;
     }
 
+    async open(): Promise<ClientSession> {
+        return this.openDo(false);
+    }
+
     /**
      * 打开
      */
-    async open(): Promise<ClientSession> {
+    async openOrThow(): Promise<ClientSession> {
+        return this.openDo(true);
+    }
+
+    async openDo(isThow: boolean): Promise<ClientSession> {
         const sessionList = new Array<ClientSession>();
 
         for (const urls of this._serverUrls) {
@@ -63,20 +79,28 @@ export class ClusterClient implements Client {
 
                 const client = SocketD.createClient(url);
 
-                if (this._listener != null) {
+                if (this._listener) {
                     client.listen(this._listener);
                 }
 
-                if (this._configHandler != null) {
+                if (this._configHandler) {
                     client.config(this._configHandler);
                 }
 
-                if (this._heartbeatHandler != null) {
+                if (this._connectHandler) {
+                    client.connectHandler(this._connectHandler);
+                }
+
+                if (this._heartbeatHandler) {
                     client.heartbeatHandler(this._heartbeatHandler);
                 }
 
-                const session = await client.open();
-                sessionList.push(session);
+                if (isThow) {
+                    sessionList.push(await client.openOrThow());
+                } else {
+                    sessionList.push(await client.open());
+                }
+
             }
         }
 

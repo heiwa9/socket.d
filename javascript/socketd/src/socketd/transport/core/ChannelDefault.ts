@@ -6,10 +6,13 @@ import type {ChannelSupporter} from "./ChannelSupporter";
 import type {Config} from "./Config";
 import {Frame, Frames} from "./Frame";
 import {MessageBuilder} from "./Message";
-import {Constants, EntityMetas, Flags} from "./Constants";
+import {Constants} from "./Constants";
+import {EntityMetas} from "./EntityMetas";
+import {Flags} from "./Flags";
 import {ChannelBase, ChannelInternal} from "./Channel";
 import {SessionDefault} from "./SessionDefault";
 import type { IoBiConsumer } from "./Typealias";
+import {SocketAddress} from "./SocketAddress";
 
 export class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
     private _source: S;
@@ -23,7 +26,10 @@ export class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
     private _session: Session;
     //最后活动时间
     private _liveTime: number = 0;
+    //打开前景（用于构建 onOpen 异步处理）
     private _onOpenFuture: IoBiConsumer<boolean, Error>;
+    //关闭代号（用于做关闭异常提醒）//可能协议关；可能用户关
+    private _closeCode: number = 0;
 
     constructor(source: S, supporter: ChannelSupporter<S>) {
         super(supporter.getConfig());
@@ -43,8 +49,21 @@ export class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
         }
     }
 
-    isValid() {
+    isValid(): boolean {
         return this.isClosed() == 0 && this._assistant.isValid(this._source);
+    }
+
+
+    isClosing(): boolean {
+        return this._closeCode == Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING;
+    }
+
+    isClosed(): number {
+        if (this._closeCode > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+            return this._closeCode;
+        } else {
+            return 0;
+        }
     }
 
     config(): Config {
@@ -59,12 +78,21 @@ export class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
         this.send(Frames.pongFrame(), null);
     }
 
-    send(frame: Frame, stream: StreamInternal<any> | null){
-        // if (this.getConfig().clientMode()) {
-        //     console.trace("C-SEN:" + frame);
-        // } else {
-        //     console.trace("S-SEN:" + frame);
-        // }
+    getRemoteAddress(): SocketAddress | null {
+        return this._assistant.getRemoteAddress(this._source);
+    }
+
+    getLocalAddress(): SocketAddress | null {
+        return this._assistant.getLocalAddress(this._source);
+    }
+
+    send(frame: Frame, stream: StreamInternal<any> | null) {
+        if (this.getConfig().clientMode()) {
+            //console.debug("C-SEN:" + frame);
+        } else {
+            //只打印服务端的（客户端的容易被人看光）
+            console.debug("S-SEN:" + frame);
+        }
 
 
         if (frame.message()) {
@@ -157,11 +185,21 @@ export class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
     }
 
     close(code) {
-        console.debug(`${this.getConfig().getRoleName()} channel will be closed, sessionId=${this.getSession().sessionId()}`);
-
         try {
+            let closeCodeOld = this._closeCode;
+            this._closeCode = code;
+
             super.close(code);
-            this._assistant.close(this._source);
+
+            if (closeCodeOld > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING
+                && code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+                //如果有效且非预关闭，则尝试关闭源 //外面的 sendClose 是异步的，所以晚会儿关闭
+                setTimeout(() => {
+                    this._assistant.close(this._source);
+                }, 100);
+
+                console.debug(`${this.getConfig().getRoleName()} channel closed, sessionId=${this.getSession().sessionId()}`);
+            }
         } catch (e) {
             console.warn(`${this.getConfig().getRoleName()} channel close error, sessionId=${this.getSession().sessionId()}`, e);
         }

@@ -1,5 +1,7 @@
 
-import {Constants, EntityMetas, Flags} from "./Constants";
+import {Constants} from "./Constants";
+import {EntityMetas} from "./EntityMetas";
+import {Flags} from "./Flags";
 import type {Entity, Reply} from "./Entity";
 import type {CodecReader} from "./Codec";
 import type {Buffer} from "./Buffer";
@@ -241,12 +243,24 @@ export class MessageDefault implements MessageInternal {
         return this._entity!.metaAsInt(name);
     }
 
+    metaAsLong(name: string): number {
+        return this.metaAsInt(name);
+    }
+
     metaAsFloat(name: string): number {
         return this._entity!.metaAsFloat(name);
     }
 
-    putMeta(name: string, val: string) {
+    metaAsDouble(name: string): number {
+        return this.metaAsFloat(name)
+    }
+
+    putMeta(name: string, val: string | null) {
         this._entity!.putMeta(name, val);
+    }
+
+    delMeta(name: string) {
+        this._entity!.delMeta(name);
     }
 
     data(): Buffer {

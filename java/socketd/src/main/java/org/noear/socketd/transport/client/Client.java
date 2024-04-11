@@ -12,12 +12,17 @@ import java.io.IOException;
  */
 public interface Client {
     /**
-     * 心跳
+     * 连接处理
      */
-    Client heartbeatHandler(HeartbeatHandler handler);
+    Client connectHandler(ClientConnectHandler connectHandler);
 
     /**
-     * 配置
+     * 心跳处理
+     */
+    Client heartbeatHandler(ClientHeartbeatHandler heartbeatHandler);
+
+    /**
+     * 配置处理
      */
     Client config(ClientConfigHandler configHandler);
 
@@ -29,5 +34,10 @@ public interface Client {
     /**
      * 打开会话
      */
-    ClientSession open() throws IOException;
+    ClientSession open();
+
+    /**
+     * 打开会话或出异常（即要求第一次是连接成功的）
+     */
+    ClientSession openOrThow() throws IOException;
 }

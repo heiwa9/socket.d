@@ -1,8 +1,7 @@
 import asyncio
 import ssl
-import uuid
 
-from socketd.SocketD import SocketD
+from socketd import SocketD
 from socketd.transport.client.ClientConfig import ClientConfig
 from test.modelu.BaseTestCase import BaseTestCase
 
@@ -41,26 +40,22 @@ class TestCase13_ssl(BaseTestCase):
 
     async def _start(self):
         s = SimpleListenerTest()
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).set_port(self.port))
+        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
 
-        def s_config_handler(config: ServerConfig | ClientConfig) -> ServerConfig | ClientConfig:
-            config.set_idle_timeout(10)
+        def s_config_handler(config: ServerConfig | ClientConfig):
+            config.idle_timeout(10000)
             # config.set_logger_level("DEBUG")
-            config.id_generator(uuid.uuid4)
             config.ssl_context(get_s_ssl())
-            return config
 
         self.server_session: WebSocketServer = await self.server.config(s_config_handler).listen(
             s).start()
         await asyncio.sleep(1)
         serverUrl = self.schema + "://127.0.0.1:" + str(self.port) + "/path?u=a&p=2"
 
-        def c_config_handler(config: ServerConfig | ClientConfig) -> ServerConfig | ClientConfig:
-            config.set_idle_timeout(10)
+        def c_config_handler(config: ServerConfig | ClientConfig):
+            config.idle_timeout(10000)
             # config.set_logger_level("DEBUG")
-            config.id_generator(uuid.uuid4)
             config.ssl_context(get_c_ssl())
-            return config
 
         self.client_session: Session = await SocketD.create_client(serverUrl) \
             .config(c_config_handler).open()

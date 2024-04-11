@@ -27,26 +27,8 @@ public interface Constants {
     ByteBuffer DEF_DATA = ByteBuffer.wrap(new byte[]{});
     /**
      * 默认端口
-     * */
+     */
     int DEF_PORT = 8602;
-
-
-    /**
-     * 因协议指令关闭
-     */
-    int CLOSE1_PROTOCOL = 1;
-    /**
-     * 因协议非法关闭
-     */
-    int CLOSE2_PROTOCOL_ILLEGAL = 2;
-    /**
-     * 因异常关闭
-     */
-    int CLOSE3_ERROR = 3;
-    /**
-     * 因用户主动关闭
-     */
-    int CLOSE4_USER = 4;
 
 
     /**
@@ -89,4 +71,39 @@ public interface Constants {
      * 多需求
      */
     int DEMANDS_MULTIPLE = 2;
+
+
+    /**
+     * 因协议关闭开始（安全关闭）
+     */
+    int CLOSE1000_PROTOCOL_CLOSE_STARTING = 1000;
+    /**
+     * 因协议指令关闭
+     */
+    int CLOSE1001_PROTOCOL_CLOSE = 1001;
+    /**
+     * 因协议非法关闭
+     */
+    int CLOSE1002_PROTOCOL_ILLEGAL = 1002;
+
+    /**
+     * 因异常关闭
+     */
+    int CLOSE2001_ERROR = 2001;
+    /**
+     * 因重连关闭
+     */
+    int CLOSE2002_RECONNECT = 2002;
+    /**
+     * 因连接断开
+     */
+    int CLOSE2003_DISCONNECTION = 2003;
+    /**
+     * 因打开失败关闭
+     */
+    int CLOSE2008_OPEN_FAIL = 2008;
+    /**
+     * 因用户主动关闭（不可再重连）
+     */
+    int CLOSE2009_USER = 2009;
 }

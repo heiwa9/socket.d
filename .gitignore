@@ -27,10 +27,17 @@ nbdist/
 .nb-gradle/
 obj/
 bin/
+
+### Web ###
 node_modules/
 .hbuilderx/
+
+### Python ###
+*.pyc
+venv/
 
 ### Mac files ###
 *.DS_Store
 /python/socketd/socketD.egg-info/
 
+/python/socketd/test/cases/ssl/

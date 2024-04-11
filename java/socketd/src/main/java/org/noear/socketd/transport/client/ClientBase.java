@@ -1,8 +1,9 @@
 package org.noear.socketd.transport.client;
 
+import org.noear.socketd.exception.SocketDException;
+import org.noear.socketd.transport.client.impl.ClientConnectHandlerDefault;
 import org.noear.socketd.transport.core.*;
 import org.noear.socketd.transport.core.impl.ProcessorDefault;
-import org.noear.socketd.transport.core.impl.SessionDefault;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,15 +21,17 @@ public abstract class ClientBase<T extends ChannelAssistant> implements ClientIn
     //协议处理器
     protected Processor processor = new ProcessorDefault();
     //心跳处理
-    protected HeartbeatHandler heartbeatHandler;
+    protected ClientHeartbeatHandler heartbeatHandler;
+    //连接处理
+    protected ClientConnectHandler connectHandler = new ClientConnectHandlerDefault();
 
     //配置
     private final ClientConfig config;
     //助理
     private final T assistant;
 
-    public ClientBase(ClientConfig clientConfig, T assistant) {
-        this.config = clientConfig;
+    public ClientBase(ClientConfig config, T assistant) {
+        this.config = config;
         this.assistant = assistant;
     }
 
@@ -38,23 +41,6 @@ public abstract class ClientBase<T extends ChannelAssistant> implements ClientIn
     public T getAssistant() {
         return assistant;
     }
-
-    /**
-     * 获取心跳处理
-     */
-    @Override
-    public HeartbeatHandler getHeartbeatHandler() {
-        return heartbeatHandler;
-    }
-
-    /**
-     * 获取心跳间隔（毫秒）
-     */
-    @Override
-    public long getHeartbeatInterval() {
-        return config.getHeartbeatInterval();
-    }
-
 
     /**
      * 获取配置
@@ -73,12 +59,49 @@ public abstract class ClientBase<T extends ChannelAssistant> implements ClientIn
     }
 
     /**
-     * 设置心跳
+     * 获取连接处理器
      */
     @Override
-    public Client heartbeatHandler(HeartbeatHandler handler) {
-        if (handler != null) {
-            this.heartbeatHandler = handler;
+    public ClientConnectHandler getConnectHandler() {
+        return connectHandler;
+    }
+
+    /**
+     * 获取心跳处理
+     */
+    @Override
+    public ClientHeartbeatHandler getHeartbeatHandler() {
+        return heartbeatHandler;
+    }
+
+    /**
+     * 获取心跳间隔（毫秒）
+     */
+    @Override
+    public long getHeartbeatInterval() {
+        return config.getHeartbeatInterval();
+    }
+
+
+    /**
+     * 设置连接处理器
+     */
+    @Override
+    public Client connectHandler(ClientConnectHandler connectHandler) {
+        if (connectHandler != null) {
+            this.connectHandler = connectHandler;
+        }
+
+        return this;
+    }
+
+    /**
+     * 设置心跳处理器
+     */
+    @Override
+    public Client heartbeatHandler(ClientHeartbeatHandler heartbeatHandler) {
+        if (heartbeatHandler != null) {
+            this.heartbeatHandler = heartbeatHandler;
         }
 
         return this;
@@ -106,26 +129,51 @@ public abstract class ClientBase<T extends ChannelAssistant> implements ClientIn
         return this;
     }
 
+
     /**
      * 打开会话
      */
     @Override
-    public Session open() throws IOException {
+    public ClientSession open() {
+        try {
+            return openDo(false);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * 打开会话或出异常
+     */
+    @Override
+    public ClientSession openOrThow() throws IOException {
+        return openDo(true);
+    }
+
+    private Session openDo(boolean isThow) throws IOException {
         ClientConnector connector = createConnector();
+        ClientChannel clientChannel = new ClientChannel(this, connector);
 
-        //连接
-        ChannelInternal channel0 = connector.connect();
-        //新建客户端通道
-        ClientChannel clientChannel = new ClientChannel(channel0, connector);
-        //同步握手信息
-        clientChannel.setHandshake(channel0.getHandshake());
-        Session session = new SessionDefault(clientChannel);
-        //原始通道切换为带壳的 session
-        channel0.setSession(session);
+        try {
+            clientChannel.connect();
 
-        log.info("Socket.D client successfully connected: {link={}}", getConfig().getLinkUrl());
+            log.info("Socket.D client successfully connected: {link={}}", getConfig().getLinkUrl());
+        } catch (Throwable e) {
+            if (isThow) {
 
-        return session;
+                clientChannel.close(Constants.CLOSE2008_OPEN_FAIL);
+
+                if (e instanceof RuntimeException || e instanceof IOException) {
+                    throw e;
+                } else {
+                    throw new SocketDException("Socket.D client Connection failed", e);
+                }
+            } else {
+                log.info("Socket.D client Connection failed: {link={}}", getConfig().getLinkUrl());
+            }
+        }
+
+        return clientChannel.getSession();
     }
 
     /**

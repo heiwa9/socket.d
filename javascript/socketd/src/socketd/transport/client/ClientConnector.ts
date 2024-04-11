@@ -2,6 +2,8 @@ import type {IoConsumer} from "../core/Typealias";
 import type {Session} from "../core/Session";
 import type {ChannelInternal} from "../core/Channel";
 import type {ClientInternal} from "./Client";
+import {Config} from "../core/Config";
+import {ClientConfig} from "./ClientConfig";
 
 /**
  * 客户端连接器
@@ -11,14 +13,9 @@ import type {ClientInternal} from "./Client";
  */
 export interface ClientConnector {
     /**
-     * 心跳处理
-     */
-    heartbeatHandler(): IoConsumer<Session>;
-
-    /**
-     * 心跳频率（单位：毫秒）
-     */
-    heartbeatInterval(): number;
+     * 获取配置
+     * */
+    getConfig(): ClientConfig;
 
     /**
      * 是否自动重连
@@ -51,12 +48,8 @@ export abstract class ClientConnectorBase<T extends ClientInternal> implements C
         this._client = client;
     }
 
-    heartbeatHandler(): IoConsumer<Session> {
-        return this._client.getHeartbeatHandler();
-    }
-
-    heartbeatInterval(): number {
-        return this._client.getHeartbeatInterval();
+    getConfig(): ClientConfig {
+        return this._client.getConfig();
     }
 
     autoReconnect(): boolean {

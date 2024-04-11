@@ -124,7 +124,23 @@ public class EntityDefault implements Entity {
      * @param val  值
      */
     public EntityDefault metaPut(String name, String val) {
-        metaMap().put(name, val);
+        if (val == null) {
+            metaMap().remove(name);
+        } else {
+            metaMap().put(name, val);
+        }
+
+        this.metaStringChanged = true;
+        return this;
+    }
+
+    /**
+     * 删除元信息
+     *
+     * @param name 名字
+     */
+    public EntityDefault metaDel(String name) {
+        metaMap().remove(name);
         this.metaStringChanged = true;
         return this;
     }
@@ -159,6 +175,14 @@ public class EntityDefault implements Entity {
     @Override
     public void putMeta(String name, String val) {
         metaPut(name, val);
+    }
+
+    /**
+     * 删除元信息
+     * */
+    @Override
+    public void delMeta(String name) {
+        metaDel(name);
     }
 
     /**

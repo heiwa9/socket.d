@@ -1,10 +1,7 @@
 package org.noear.socketd.transport.core.impl;
 
 import org.noear.socketd.SocketD;
-import org.noear.socketd.transport.core.EntityMetas;
-import org.noear.socketd.transport.core.Flags;
-import org.noear.socketd.transport.core.Frame;
-import org.noear.socketd.transport.core.Message;
+import org.noear.socketd.transport.core.*;
 import org.noear.socketd.transport.core.entity.EntityDefault;
 import org.noear.socketd.transport.core.entity.MessageBuilder;
 import org.noear.socketd.transport.core.entity.StringEntity;
@@ -28,6 +25,7 @@ public class Frames {
         //添加框架版本号
         entity.metaMapPut(metaMap);
         entity.metaPut(EntityMetas.META_SOCKETD_VERSION, SocketD.protocolVersion());
+
         return new Frame(Flags.Connect, new MessageBuilder()
                 .sid(sid)
                 .event(url) //兼容旧版本（@deprecated 2.2.2）
@@ -37,16 +35,18 @@ public class Frames {
     /**
      * 构建连接确认帧
      *
-     * @param connectMessage 连接消息
+     * @param handshake 握手信息
      */
-    public static final Frame connackFrame(Message connectMessage) {
+    public static final Frame connackFrame(HandshakeInternal handshake) {
         EntityDefault entity = new EntityDefault();
         //添加框架版本号
+        entity.metaMapPut(handshake.getOutMetaMap());
         entity.metaPut(EntityMetas.META_SOCKETD_VERSION, SocketD.protocolVersion());
-        entity.dataSet(connectMessage.entity().data());
+        entity.dataSet(handshake.getSource().entity().data());
+
         return new Frame(Flags.Connack, new MessageBuilder()
-                .sid(connectMessage.sid())
-                .event(connectMessage.event()) //兼容旧版本（@deprecated 2.2.2）
+                .sid(handshake.getSource().sid())
+                .event(handshake.getSource().event()) //兼容旧版本（@deprecated 2.2.2）
                 .entity(entity).build());
     }
 
@@ -67,25 +67,28 @@ public class Frames {
     /**
      * 构建关闭帧（一般用不到）
      */
-    public static final Frame closeFrame() {
-        return new Frame(Flags.Close, null);
+    public static final Frame closeFrame(int code) {
+        MessageBuilder messageBuilder = new MessageBuilder();
+        messageBuilder.entity(Entity.of().metaPut("code", String.valueOf(code)));
+
+        return new Frame(Flags.Close, messageBuilder.build());
     }
 
     /**
      * 构建告警帧（一般用不到）
      */
     public static final Frame alarmFrame(Message from, String alarm) {
-        MessageBuilder message = new MessageBuilder();
+        MessageBuilder messageBuilder = new MessageBuilder();
 
         if (from != null) {
             //如果有来源消息，则回传元信息
-            message.sid(from.sid());
-            message.event(from.event());
-            message.entity(new StringEntity(alarm).metaStringSet(from.metaString()));
+            messageBuilder.sid(from.sid());
+            messageBuilder.event(from.event());
+            messageBuilder.entity(new StringEntity(alarm).metaStringSet(from.metaString()));
         } else {
-            message.entity(new StringEntity(alarm));
+            messageBuilder.entity(new StringEntity(alarm));
         }
 
-        return new Frame(Flags.Alarm, message.build());
+        return new Frame(Flags.Alarm, messageBuilder.build());
     }
 }

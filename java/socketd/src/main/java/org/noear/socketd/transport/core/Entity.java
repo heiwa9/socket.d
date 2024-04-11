@@ -18,7 +18,7 @@ import java.util.Map;
 public interface Entity {
     // >>> 不需要迁移
     static StringEntity of(String data){
-        return Entity.of(data);
+        return new StringEntity(data);
     }
 
     static FileEntity of(File data) throws IOException {
@@ -90,6 +90,11 @@ public interface Entity {
      * 放置元信息
      * */
     void putMeta(String name, String val);
+
+    /**
+     * 删除元信息
+     * */
+    void delMeta(String name);
 
     /**
      * 获取数据

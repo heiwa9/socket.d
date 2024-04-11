@@ -1,8 +1,9 @@
 import {StrUtils} from "../../utils/StrUtils";
 import {ArrayBufferCodecReader, CodecReader} from "./Codec";
-import {Constants, EntityMetas} from "./Constants";
+import {Constants} from "./Constants";
+import {EntityMetas} from "./EntityMetas";
 import {BlobBuffer, type Buffer, ByteBuffer} from "./Buffer";
-import {SocketdException} from "../../exception/SocketdException";
+import {SocketDException} from "../../exception/SocketDException";
 
 
 /**
@@ -38,14 +39,29 @@ export interface Entity {
     metaAsInt(name:string):number;
 
     /**
+     * 获取元信息并转为 long(int)
+     */
+    metaAsLong(name:string):number;
+
+    /**
      * 获取元信息并转为 float
      */
     metaAsFloat(name:string):number;
 
     /**
+     * 获取元信息并转为 double(float)
+     */
+    metaAsDouble(name:string):number;
+
+    /**
      * 添加元信息
      * */
-    putMeta(name: string, val: string);
+    putMeta(name: string, val: string | null);
+
+    /**
+     * 删除元信息
+     * */
+    delMeta(name: string);
 
     /**
      * 获取数据
@@ -171,9 +187,23 @@ export class EntityDefault implements Entity {
      * @param name 名字
      * @param val  值
      */
-    metaPut(name: string, val: string): EntityDefault {
-        this.metaMap().set(name, val);
+    metaPut(name: string, val: string | null): EntityDefault {
+        if (val == null) {
+            this.metaMap().delete(name);
+        } else {
+            this.metaMap().set(name, val);
+        }
+
         return this;
+    }
+
+    /**
+     * 删除元信息
+     *
+     * @param name 名字
+     */
+    metaDel(name:string){
+        this.metaMap().delete(name);
     }
 
     /**
@@ -235,10 +265,24 @@ export class EntityDefault implements Entity {
     }
 
     /**
+     * 获取元信息并转为 long(int)
+     */
+    metaAsLong(name: string): number {
+        return this.metaAsInt(name);
+    }
+
+    /**
      * 获取元信息并转为 float
      */
     metaAsFloat(name: string): number {
         return parseFloat(this.metaOrDefault(name, '0'));
+    }
+
+    /**
+     * 获取元信息并转为 double(float)
+     */
+    metaAsDouble(name: string): number {
+        return this.metaAsFloat(name);
     }
 
     /**
@@ -247,8 +291,17 @@ export class EntityDefault implements Entity {
      * @param name 名字
      * @param val  值
      */
-    putMeta(name: string, val: string) {
+    putMeta(name: string, val: string| null) {
         this.metaPut(name, val);
+    }
+
+    /**
+     * 删除元信息
+     *
+     * @param name 名字
+     */
+    delMeta(name: string) {
+        this.metaDel(name);
     }
 
     /**
@@ -275,7 +328,7 @@ export class EntityDefault implements Entity {
 
     dataAsReader(): CodecReader {
         if (this._data.getArray() == null) {
-            throw new SocketdException("Blob does not support dataAsReader");
+            throw new SocketDException("Blob does not support dataAsReader");
         }
 
         if (!this._dataAsReader) {
@@ -290,7 +343,7 @@ export class EntityDefault implements Entity {
      */
     dataAsString(): string {
         if (this._data.getArray() == null) {
-            throw new SocketdException("Blob does not support dataAsString");
+            throw new SocketDException("Blob does not support dataAsString");
         }
 
         return StrUtils.bufToStrDo(this._data.getArray()!, '');

@@ -2,7 +2,7 @@ package features.cases;
 
 import org.junit.jupiter.api.Assertions;
 import org.noear.socketd.SocketD;
-import org.noear.socketd.exception.SocketdTimeoutException;
+import org.noear.socketd.exception.SocketDTimeoutException;
 import org.noear.socketd.transport.client.ClientSession;
 import org.noear.socketd.transport.core.Message;
 import org.noear.socketd.transport.core.Session;
@@ -58,14 +58,14 @@ public class TestCase13_sendAndRequest_timeout extends BaseTestCase {
 
         //client
         String serverUrl = getSchema() + "://127.0.0.1:" + getPort() + "/path?u=a&p=2";
-        clientSession = SocketD.createClient(serverUrl).open();
+        clientSession = SocketD.createClient(serverUrl).openOrThow();
 
         clientSession.send("/user/created", new StringEntity("hi"));
 
         try {
             clientSession.sendAndRequest("/user/get", new StringEntity("hi"), 100).await();
             assert false;
-        } catch (SocketdTimeoutException e) {
+        } catch (SocketDTimeoutException e) {
             assert true;
         }
 

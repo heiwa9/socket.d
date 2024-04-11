@@ -1,7 +1,7 @@
 package org.noear.socketd.transport.core.impl;
 
-import org.noear.socketd.exception.SocketdAlarmException;
-import org.noear.socketd.exception.SocketdConnectionException;
+import org.noear.socketd.exception.SocketDAlarmException;
+import org.noear.socketd.exception.SocketDConnectionException;
 import org.noear.socketd.transport.core.*;
 import org.noear.socketd.transport.core.listener.SimpleListener;
 import org.noear.socketd.transport.stream.StreamInternal;
@@ -34,7 +34,7 @@ public class ProcessorDefault implements Processor {
     /**
      * 接收处理
      */
-    public void onReceive(ChannelInternal channel, Frame frame)  {
+    public void onReceive(ChannelInternal channel, Frame frame) {
         if (log.isDebugEnabled()) {
             if (channel.getConfig().clientMode()) {
                 log.debug("C-REV:{}", frame);
@@ -49,13 +49,13 @@ public class ProcessorDefault implements Processor {
             channel.setHandshake(handshake);
 
             //开始打开（可用于 url 签权）//禁止发消息
-            channel.onOpenFuture((r,e)-> {
-                if (e == null) {
+            channel.onOpenFuture((r, e) -> {
+                if (r) {
                     //如果无异常
                     if (channel.isValid()) {
                         //如果还有效，则发送链接确认
                         try {
-                            channel.sendConnack(frame.message()); //->Connack
+                            channel.sendConnack(); //->Connack
                         } catch (Throwable err) {
                             onError(channel, err);
                         }
@@ -64,8 +64,7 @@ public class ProcessorDefault implements Processor {
                     //如果有异常
                     if (channel.isValid()) {
                         //如果还有效，则关闭通道
-                        channel.close(Constants.CLOSE3_ERROR);
-                        onCloseInternal(channel);
+                        onCloseInternal(channel, Constants.CLOSE2001_ERROR);
                     }
                 }
             });
@@ -78,11 +77,11 @@ public class ProcessorDefault implements Processor {
             onOpen(channel);
         } else {
             if (channel.getHandshake() == null) {
-                channel.close(Constants.CLOSE1_PROTOCOL);
+                channel.close(Constants.CLOSE1002_PROTOCOL_ILLEGAL);
 
-                if(frame.flag() == Flags.Close){
+                if (frame.flag() == Flags.Close) {
                     //说明握手失败了
-                    throw new SocketdConnectionException("Connection request was rejected");
+                    throw new SocketDConnectionException("Connection request was rejected");
                 }
 
                 if (log.isWarnEnabled()) {
@@ -107,13 +106,22 @@ public class ProcessorDefault implements Processor {
                     }
                     case Flags.Close: {
                         //关闭通道
-                        channel.close(Constants.CLOSE1_PROTOCOL);
-                        onCloseInternal(channel);
+                        int code = 0;
+
+                        if (frame.message() != null) {
+                            code = frame.message().metaAsInt("code");
+                        }
+
+                        if (code == 0) {
+                            code = Constants.CLOSE1001_PROTOCOL_CLOSE;
+                        }
+
+                        onCloseInternal(channel, code);
                         break;
                     }
                     case Flags.Alarm: {
                         //结束流，并异常通知
-                        SocketdAlarmException exception = new SocketdAlarmException(frame.message());
+                        SocketDAlarmException exception = new SocketDAlarmException(frame.message());
                         StreamInternal stream = channel.getConfig().getStreamManger().getStream(frame.message().sid());
                         if (stream == null) {
                             onError(channel, exception);
@@ -123,6 +131,8 @@ public class ProcessorDefault implements Processor {
                         }
                         break;
                     }
+                    case Flags.Pressure: //预留
+                        break;
                     case Flags.Message:
                     case Flags.Request:
                     case Flags.Subscribe: {
@@ -135,8 +145,7 @@ public class ProcessorDefault implements Processor {
                         break;
                     }
                     default: {
-                        channel.close(Constants.CLOSE2_PROTOCOL_ILLEGAL);
-                        onCloseInternal(channel);
+                        onCloseInternal(channel, Constants.CLOSE1002_PROTOCOL_ILLEGAL);
                     }
                 }
             } catch (Throwable e) {
@@ -198,7 +207,7 @@ public class ProcessorDefault implements Processor {
      */
     @Override
     public void onOpen(ChannelInternal channel) {
-        channel.getConfig().getChannelExecutor().submit(() -> {
+        channel.getConfig().getExchangeExecutor().submit(() -> {
             try {
                 listener.onOpen(channel.getSession());
                 channel.doOpenFuture(true, null);
@@ -220,7 +229,7 @@ public class ProcessorDefault implements Processor {
      */
     @Override
     public void onMessage(ChannelInternal channel, Message message) {
-        channel.getConfig().getChannelExecutor().submit(() -> {
+        channel.getConfig().getExchangeExecutor().submit(() -> {
             try {
                 listener.onMessage(channel.getSession(), message);
             } catch (Throwable e) {
@@ -240,8 +249,8 @@ public class ProcessorDefault implements Processor {
      */
     @Override
     public void onClose(ChannelInternal channel) {
-        if (channel.isClosed() == 0) {
-            onCloseInternal(channel);
+        if (channel.isClosed() <= Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+            onCloseInternal(channel, Constants.CLOSE2003_DISCONNECTION);
         }
     }
 
@@ -250,8 +259,12 @@ public class ProcessorDefault implements Processor {
      *
      * @param channel 通道
      */
-    private void onCloseInternal(ChannelInternal channel){
-        listener.onClose(channel.getSession());
+    private void onCloseInternal(ChannelInternal channel, int code) {
+        channel.close(code);
+
+        if (code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+            listener.onClose(channel.getSession());
+        }
     }
 
     /**

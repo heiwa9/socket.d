@@ -24,7 +24,7 @@ public class SocketD {
      * 框架版本号
      */
     public static String version() {
-        return "2.3.6";
+        return "2.4.9";
     }
 
     /**
@@ -51,17 +51,25 @@ public class SocketD {
         clientProviderMap = new HashMap<>();
         serverProviderMap = new HashMap<>();
 
-        ServiceLoader.load(ClientProvider.class).iterator().forEachRemaining(factory -> {
-            for (String s : factory.schemas()) {
-                clientProviderMap.put(s, factory);
-            }
+        ServiceLoader.load(ClientProvider.class).iterator().forEachRemaining(clientProvider -> {
+            registerClientProvider(clientProvider);
         });
 
-        ServiceLoader.load(ServerProvider.class).iterator().forEachRemaining(factory -> {
-            for (String s : factory.schemas()) {
-                serverProviderMap.put(s, factory);
-            }
+        ServiceLoader.load(ServerProvider.class).iterator().forEachRemaining(serverProvider -> {
+            registerServerProvider(serverProvider);
         });
+    }
+
+    public static void registerClientProvider(ClientProvider clientProvider) {
+        for (String s : clientProvider.schemas()) {
+            clientProviderMap.put(s, clientProvider);
+        }
+    }
+
+    public static void registerServerProvider(ServerProvider serverProvider) {
+        for (String s : serverProvider.schemas()) {
+            serverProviderMap.put(s, serverProvider);
+        }
     }
 
     /**
@@ -70,7 +78,7 @@ public class SocketD {
     public static Server createServer(String schema) {
         Server server = createServerOrNull(schema);
         if (server == null) {
-            throw new IllegalStateException("No socketd server providers were found.");
+            throw new IllegalStateException("No socketd server providers were found: " + schema);
         } else {
             return server;
         }
@@ -98,7 +106,7 @@ public class SocketD {
     public static Client createClient(String serverUrl) {
         Client client = createClientOrNull(serverUrl);
         if (client == null) {
-            throw new IllegalStateException("No socketd client providers were found.");
+            throw new IllegalStateException("No socketd client providers were found: " + serverUrl);
         } else {
             return client;
         }

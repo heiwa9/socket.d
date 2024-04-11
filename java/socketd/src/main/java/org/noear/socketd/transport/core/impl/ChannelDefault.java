@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
 /**
@@ -29,12 +29,18 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
     private final ChannelAssistant<S> assistant;
     //流管理器
     private final StreamManger streamManger;
+    //发送锁
+    private final ReentrantLock sendInFairLock;
+    private final ReentrantLock sendNoFairLock;
+
     //会话（懒加载）
     private Session session;
     //最后活动时间
     private long liveTime;
     //打开前景（用于构建 onOpen 异步处理）
     private BiConsumer<Boolean, Throwable> onOpenFuture;
+    //关闭代号（用于做关闭异常提醒）//可能协议关；可能用户关
+    private int closeCode;
 
     public ChannelDefault(S source, ChannelSupporter<S> supporter) {
         super(supporter.getConfig());
@@ -42,6 +48,8 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
         this.processor = supporter.getProcessor();
         this.assistant = supporter.getAssistant();
         this.streamManger = supporter.getConfig().getStreamManger();
+        this.sendInFairLock = new ReentrantLock(true);
+        this.sendNoFairLock = new ReentrantLock(false);
     }
 
     /**
@@ -52,6 +60,19 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
         return isClosed() == 0 && assistant.isValid(source);
     }
 
+    @Override
+    public boolean isClosing() {
+        return closeCode == Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING;
+    }
+
+    @Override
+    public int isClosed() {
+        if (closeCode > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+            return closeCode;
+        } else {
+            return 0;
+        }
+    }
 
     @Override
     public long getLiveTime() {
@@ -79,7 +100,6 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
         return assistant.getLocalAddress(source);
     }
 
-    private Object SEND_LOCK = new Object();
 
     /**
      * 发送
@@ -96,48 +116,76 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
             }
         }
 
-        synchronized (SEND_LOCK) {
-            if (frame.message() != null) {
-                MessageInternal message = frame.message();
+        //
+        //如果是单线程语言的，只需要使用无锁发送
+        //
 
-                //注册流接收器
-                if (stream != null) {
-                    streamManger.addStream(message.sid(), stream);
+        if (getConfig().isNolockSend()) {
+            //无锁发送
+            sendDo(frame, stream);
+        } else {
+            //有锁发送 //如果有数据分片场景必须要有锁！
+            boolean isSerialSend = getConfig().isSerialSend();
+
+            if (isSerialSend) {
+                sendInFairLock.lock();
+                try {
+                    sendDo(frame, stream);
+                } finally {
+                    sendInFairLock.unlock();
+                }
+            } else {
+                sendNoFairLock.lock();
+                try {
+                    sendDo(frame, stream);
+                } finally {
+                    sendNoFairLock.unlock();
+                }
+            }
+        }
+    }
+
+    private void sendDo(Frame frame, StreamInternal stream) throws IOException {
+        if (frame.message() != null) {
+            MessageInternal message = frame.message();
+
+            //注册流接收器
+            if (stream != null) {
+                streamManger.addStream(message.sid(), stream);
+            }
+
+            //如果有实体（尝试分片）
+            if (message.entity() != null) {
+                //确保用完自动关闭
+
+                if (message.dataSize() > getConfig().getFragmentSize()) {
+                    message.putMeta(EntityMetas.META_DATA_LENGTH, String.valueOf(message.dataSize()));
                 }
 
-                //如果有实体（尝试分片）
-                if (message.entity() != null) {
-                    //确保用完自动关闭
-
-                    if (message.dataSize() > getConfig().getFragmentSize()) {
-                        message.putMeta(EntityMetas.META_DATA_LENGTH, String.valueOf(message.dataSize()));
+                getConfig().getFragmentHandler().spliFragment(this, stream, message, fragmentEntity -> {
+                    //主要是 sid 和 entity
+                    Frame fragmentFrame;
+                    if (fragmentEntity instanceof MessageInternal) {
+                        fragmentFrame = new Frame(frame.flag(), (MessageInternal) fragmentEntity);
+                    } else {
+                        fragmentFrame = new Frame(frame.flag(), new MessageBuilder()
+                                .flag(frame.flag())
+                                .sid(message.sid())
+                                .event(message.event())
+                                .entity(fragmentEntity)
+                                .build());
                     }
 
-                    getConfig().getFragmentHandler().spliFragment(this, stream, message, fragmentEntity -> {
-                        //主要是 sid 和 entity
-                        Frame fragmentFrame;
-                        if (fragmentEntity instanceof MessageInternal) {
-                            fragmentFrame = new Frame(frame.flag(), (MessageInternal) fragmentEntity);
-                        } else {
-                            fragmentFrame = new Frame(frame.flag(), new MessageBuilder()
-                                    .flag(frame.flag())
-                                    .sid(message.sid())
-                                    .event(message.event())
-                                    .entity(fragmentEntity)
-                                    .build());
-                        }
-
-                        assistant.write(source, fragmentFrame);
-                    });
-                    return;
-                }
+                    assistant.write(source, fragmentFrame);
+                });
+                return;
             }
+        }
 
-            //不满足分片条件，直接发
-            assistant.write(source, frame);
-            if (stream != null) {
-                stream.onProgress(true, 1, 1);
-            }
+        //不满足分片条件，直接发
+        assistant.write(source, frame);
+        if (stream != null) {
+            stream.onProgress(true, 1, 1);
         }
     }
 
@@ -160,7 +208,7 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
                 stream.onReply(frame.message());
             } else {
                 //改为异步处理，避免卡死Io线程
-                getConfig().getChannelExecutor().submit(() -> {
+                getConfig().getExchangeExecutor().submit(() -> {
                     stream.onReply(frame.message());
                 });
             }
@@ -219,19 +267,26 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
         }
     }
 
-
     /**
      * 关闭
      */
     @Override
     public void close(int code) {
-        if (log.isDebugEnabled()) {
-            log.debug("{} channel will be closed, sessionId={}", getConfig().getRoleName(), getSession().sessionId());
-        }
-
         try {
+            int closeCodeOld = closeCode;
+            this.closeCode = code;
+
             super.close(code);
-            assistant.close(source);
+
+            if (closeCodeOld > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING
+                    && code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+                //如果有效且非预关闭，则尝试关闭源
+                assistant.close(source);
+
+                if (log.isDebugEnabled()) {
+                    log.debug("{} channel closed, sessionId={}", getConfig().getRoleName(), getSession().sessionId());
+                }
+            }
         } catch (Throwable e) {
             if (log.isWarnEnabled()) {
                 log.warn("{} channel close error, sessionId={}",

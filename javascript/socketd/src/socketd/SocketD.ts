@@ -3,14 +3,19 @@ import type {ClientProvider} from "./transport/client/ClientProvider";
 import {Asserts} from "./transport/core/Asserts";
 import {ClientConfig} from "./transport/client/ClientConfig";
 import {ClusterClient} from "./cluster/ClusterClient";
-import {WsClientProvider} from "./transport_websocket/WsClientProvider";
+import {WsProvider} from "./transport_websocket/WsProvider";
 import {EntityDefault, FileEntity, StringEntity} from "./transport/core/Entity";
 import {EventListener, Listener, PathListener, PipelineListener, SimpleListener} from "./transport/core/Listener";
 import type {RouteSelector} from "./transport/core/RouteSelector";
 import type {IoBiConsumer} from "./transport/core/Typealias";
 import type {Session} from "./transport/core/Session";
 import type {Message} from "./transport/core/Message";
-import {EntityMetas} from "./transport/core/Constants";
+import {EntityMetas} from "./transport/core/EntityMetas";
+import {ServerProvider} from "./transport/server/ServerProvider";
+import {ServerConfig} from "./transport/server/ServerConfig";
+import {Server} from "./transport/server/Server";
+import {BrokerListener} from "./broker/BrokerListener";
+import {BrokerFragmentHandler} from "./broker/BrokerFragmentHandler";
 
 export class SocketD {
     /**
@@ -18,16 +23,17 @@ export class SocketD {
      * */
     static EntityMetas = EntityMetas;
 
-    private static clientProviderMap: Map<String, ClientProvider> = new Map<String, ClientProvider>();
+    private static clientProviderMap: Map<string, ClientProvider> = new Map<string, ClientProvider>();
+    private static serverProviderMap: Map<string, ServerProvider> = new Map<string, ServerProvider>();
 
     static {
-        const provider = new WsClientProvider();
+        const provider = new WsProvider();
         for (const s of provider.schemas()) {
             this.clientProviderMap.set(s, provider);
         }
 
-        if (typeof window != 'undefined') {
-            window["SocketD"] = SocketD;
+        for (const s of provider.schemas()) {
+            this.serverProviderMap.set(s, provider);
         }
     }
 
@@ -35,7 +41,7 @@ export class SocketD {
      * 框架版本号
      */
     static version(): string {
-        return "2.3.6";
+        return "2.4.9";
     }
 
     /**
@@ -46,6 +52,32 @@ export class SocketD {
     }
 
     /**
+     * 创建服务端
+     */
+    static createServer(schema: string): Server {
+        let server = this.createServerOrNull(schema);
+        if (server == null) {
+            throw new Error("No socketd server providers were found: " + schema);
+        } else {
+            return server;
+        }
+    }
+
+    /**
+     * 创建服务端，如果没有则为 null
+     */
+    static createServerOrNull(schema: string): Server | null {
+        Asserts.assertNull("schema", schema);
+
+        let factory = SocketD.serverProviderMap.get(schema);
+        if (factory == null) {
+            return null;
+        } else {
+            return factory.createServer(new ServerConfig(schema));
+        }
+    }
+
+    /**
      * 创建客户端（支持 url 自动识别）
      *
      * @param serverUrl 服务器地址
@@ -53,7 +85,7 @@ export class SocketD {
     static createClient(serverUrl: string): Client {
         const client = this.createClientOrNull(serverUrl);
         if (client == null) {
-            throw new Error("No socketd client providers were found.");
+            throw new Error("No socketd client providers were found: " + serverUrl);
         } else {
             return client;
         }
@@ -95,11 +127,9 @@ export class SocketD {
     /**
      * 创建实体
      * */
-    static newEntity(data?: String | Blob | ArrayBuffer): EntityDefault {
+    static newEntity(data?: string | Blob | ArrayBuffer): EntityDefault {
         if (!data) {
             return new EntityDefault();
-        } else if (toString.call(data) === '[object String]') {
-            return new StringEntity(data.toString());
         } else if (data instanceof File) {
             return new FileEntity(data);
         } else if (data instanceof ArrayBuffer) {
@@ -139,5 +169,18 @@ export class SocketD {
     static newPipelineListener(): PipelineListener {
         return new PipelineListener();
     }
-}
 
+    /**
+     * 创建经理人监听器
+     * */
+    static newBrokerListener(): BrokerListener {
+        return new BrokerListener();
+    }
+
+    /**
+     * 创建经理人分布处理
+     * */
+    static newBrokerFragmentHandler(): BrokerFragmentHandler {
+        return new BrokerFragmentHandler();
+    }
+}

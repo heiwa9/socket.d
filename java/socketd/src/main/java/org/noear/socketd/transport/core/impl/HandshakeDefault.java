@@ -19,6 +19,7 @@ public class HandshakeDefault implements HandshakeInternal {
     private final String path;
     private final String version;
     private final Map<String, String> paramMap;
+    private final Map<String, String> outMetaMap;
 
     /**
      * 消息源
@@ -29,16 +30,24 @@ public class HandshakeDefault implements HandshakeInternal {
 
     public HandshakeDefault(MessageInternal source) {
         String linkUrl = source.dataAsString();
-        if(StrUtils.isEmpty(linkUrl)){
+        if (StrUtils.isEmpty(linkUrl)) {
             //兼容旧版本（@deprecated 2.2）
             linkUrl = source.event();
         }
 
         this.source = source;
         this.uri = URI.create(linkUrl);
-        this.path = uri.getPath();
+
         this.version = source.meta(EntityMetas.META_SOCKETD_VERSION);
         this.paramMap = new ConcurrentHashMap<>();
+        this.outMetaMap = new ConcurrentHashMap<>();
+
+        if (StrUtils.isEmpty(uri.getPath())) {
+            //tcp://1.1.1.1 无路径连接时，path 为空
+            this.path = "/";
+        } else {
+            this.path = uri.getPath();
+        }
 
         //添加连接参数
         String queryString = uri.getQuery();
@@ -75,7 +84,7 @@ public class HandshakeDefault implements HandshakeInternal {
 
     /**
      * 请求路径
-     * */
+     */
     @Override
     public String path() {
         return path;
@@ -120,5 +129,15 @@ public class HandshakeDefault implements HandshakeInternal {
     public Handshake paramPut(String name, String value) {
         paramMap.put(name, value);
         return this;
+    }
+
+    @Override
+    public void outMeta(String name, String value) {
+        outMetaMap.put(name, value);
+    }
+
+    @Override
+    public Map<String, String> getOutMetaMap() {
+        return outMetaMap;
     }
 }

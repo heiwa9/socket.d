@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 
-from socketd.SocketD import SocketD
+from socketd import SocketD
 from socketd.transport.client.ClientConfig import ClientConfig
 from test.modelu.BaseTestCase import BaseTestCase
 
@@ -15,13 +15,10 @@ from test.modelu.SimpleListenerTest import SimpleListenerTest
 from loguru import logger
 
 
-def config_handler(config: ServerConfig | ClientConfig) -> ServerConfig | ClientConfig:
-    config.set_is_thread(False)
-    config.set_idle_timeout(10)
-    config.set_ws_max_size(2 ** 20 * 17)
+def config_handler(config: ServerConfig | ClientConfig):
+    config.is_thread(False)
+    config.idle_timeout(10000)
     # config.set_logger_level("DEBUG")
-    config.id_generator(uuid.uuid4)
-    return config
 
 
 class TestCase15_bigString(BaseTestCase):
@@ -35,7 +32,7 @@ class TestCase15_bigString(BaseTestCase):
 
     async def _start(self):
         s = SimpleListenerTest()
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).set_port(self.port))
+        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
         self.server_session: WebSocketServer = await self.server.config(config_handler).listen(
             s).start()
 

@@ -6,6 +6,8 @@ import  {Frames} from "./Frame";
 import type {Frame} from "./Frame";
 import type {StreamInternal} from "../stream/Stream";
 import type {IoBiConsumer} from "./Typealias";
+import {SocketAddress} from "./SocketAddress";
+import {Constants} from "./Constants";
 
 /**
  * 通道
@@ -22,12 +24,17 @@ export interface Channel {
     /**
      * 放置附件
      */
-    putAttachment(name: string, val: object|null);
+    putAttachment(name: string, val: object | null);
 
     /**
      * 是否有效
      */
-    isValid();
+    isValid(): boolean;
+
+    /**
+     * 是否正在关闭
+     * */
+    isClosing(): boolean;
 
     /**
      * 是否已关闭
@@ -61,19 +68,28 @@ export interface Channel {
      */
     getHandshake(): HandshakeInternal;
 
+
+    /**
+     * 获取远程地址
+     */
+    getRemoteAddress(): SocketAddress | null;
+
+    /**
+     * 获取本地地址
+     */
+    getLocalAddress(): SocketAddress | null;
+
     /**
      * 发送连接（握手）
      *
      * @param url 连接地址
      */
-    sendConnect(url: string, metaMap:Map<string,string>);
+    sendConnect(url: string, metaMap: Map<string, string>);
 
     /**
      * 发送连接确认（握手）
-     *
-     * @param connectMessage 连接消息
      */
-    sendConnack(connectMessage: Message);
+    sendConnack();
 
     /**
      * 发送 Ping（心跳）
@@ -87,8 +103,10 @@ export interface Channel {
 
     /**
      * 发送 Close
+     *
+     * @param code 关闭代码
      */
-    sendClose();
+    sendClose(code: number);
 
     /**
      * 发送告警
@@ -164,7 +182,6 @@ export abstract class  ChannelBase implements Channel {
     protected _config: Config;
     private _attachments: Map<string, any>;
     private _handshake: HandshakeInternal;
-    private _isClosed: number = 0;
 
     constructor(config: Config) {
         this._config = config;
@@ -185,16 +202,16 @@ export abstract class  ChannelBase implements Channel {
         }
     }
 
-    abstract isValid();
+    abstract isValid(): boolean;
 
+    abstract isClosing(): boolean;
 
-    isClosed(): number {
-        return this._isClosed;
-    }
+    abstract isClosed(): number;
 
     close(code: number) {
-        this._isClosed = code;
-        this._attachments.clear();
+        if (code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+            this._attachments.clear();
+        }
     }
 
 
@@ -211,11 +228,11 @@ export abstract class  ChannelBase implements Channel {
     }
 
     sendConnect(url: string, metaMap: Map<string, string>) {
-        this.send(Frames.connectFrame(this.getConfig().getIdGenerator().generate(), url, metaMap), null)
+        this.send(Frames.connectFrame(this.getConfig().genId(), url, metaMap), null)
     }
 
-    sendConnack(connectMessage: Message) {
-        this.send(Frames.connackFrame(connectMessage), null);
+    sendConnack() {
+        this.send(Frames.connackFrame(this.getHandshake()), null);
     }
 
     sendPing() {
@@ -226,13 +243,17 @@ export abstract class  ChannelBase implements Channel {
         this.send(Frames.pongFrame(), null);
     }
 
-    sendClose() {
-        this.send(Frames.closeFrame(), null);
+    sendClose(code:number) {
+        this.send(Frames.closeFrame(code), null);
     }
 
     sendAlarm(from: Message, alarm: string) {
         this.send(Frames.alarmFrame(from, alarm), null);
     }
+
+    abstract getRemoteAddress(): SocketAddress | null ;
+
+    abstract getLocalAddress(): SocketAddress | null ;
 
     abstract send(frame: Frame, stream: StreamInternal<any> | null);
 

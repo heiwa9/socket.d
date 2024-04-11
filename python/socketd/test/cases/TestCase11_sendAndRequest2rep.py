@@ -1,10 +1,11 @@
 import asyncio
 import uuid
 
-from socketd.SocketD import SocketD
+from threading import current_thread
+from socketd import SocketD
 from socketd.transport.client.ClientConfig import ClientConfig
 from socketd.transport.core.Message import Message
-from socketd.transport.core.stream.RequestStream import RequestStream
+from socketd.transport.stream.RequestStream import RequestStream
 from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
 from test.modelu.BaseTestCase import BaseTestCase
 
@@ -19,12 +20,10 @@ from socketd.transport.core.Listener import Listener
 from loguru import logger
 
 
-def config_handler(config: ServerConfig | ClientConfig) -> ServerConfig | ClientConfig:
-    config.set_is_thread(True)
-    config.set_idle_timeout(10)
-    config.set_logger_level("DEBUG")
-    config.id_generator(uuid.uuid4)
-    return config
+def config_handler(config: ServerConfig | ClientConfig):
+    config.is_thread(True)
+    config.idle_timeout(10000)
+    config.logger_level("DEBUG")
 
 
 class SimpleListenerTest(Listener):
@@ -40,12 +39,13 @@ class SimpleListenerTest(Listener):
     async def on_message(self, session, message: Message):
         with self.server_counter:
             self.server_counter.set(self.server_counter.get() + 1)
-        logger.info(f"server::{message.get_data_as_string()} :: {message}")
+        logger.info(f"server::{message.data_as_string()} :: {message}")
         if message.is_request():
             req: RequestStream = await session.send_and_request("demo", StringEntity("今天不好"), 100)
-            # todo 开启单独线程后，在open确认连接后，会停留10s(线程可见性不佳)，但是可以解决线程阻塞问题
-            # await asyncio.sleep(1)
+            # todo await_result会进行强阻塞线程，导致无法监听到其他线程修改的值，线程可见性，这里就停止0.1等待
+            logger.debug(f"开始等待::s::{current_thread().name} eventLoop: {id(asyncio.get_running_loop())}")
             entity = await req.await_result()
+            logger.debug(f"等待结束::s::{current_thread().name} eventLoop: {id(asyncio.get_running_loop())}")
             await session.reply_end(message, entity)
             logger.info(f"server::res::: {entity}")
             with self.message_counter:
@@ -77,8 +77,9 @@ class ClientListenerTest(Listener):
         self.message_counter = AtomicRefer(0)
 
     async def on_message(self, session: Session, message: Message):
-        logger.info(f"client: {message} {message.get_data_as_string()}")
+        logger.info(f"client: {message} {message.data_as_string()}")
         if message.is_request():
+            logger.debug(f"运行::c:: {current_thread().name} eventLoop: {id(asyncio.get_running_loop())}")
             await session.reply_end(message, StringEntity("很好"))
 
 
@@ -94,7 +95,7 @@ class TestCase11_sendAndRequest2rep(BaseTestCase):
 
     async def _start(self):
         s = SimpleListenerTest()
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).set_port(self.port))
+        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
         self.server_session: WebSocketServer = await self.server.config(config_handler).listen(
             s).start()
 
@@ -103,14 +104,17 @@ class TestCase11_sendAndRequest2rep(BaseTestCase):
             .listen(ClientListenerTest()) \
             .config(config_handler)
         self.client_session: Session = await self.client.open()
-        await asyncio.sleep(1)
+        # await asyncio.sleep(1)
         req: RequestStream = await self.client_session.send_and_request("demo", StringEntity("你好"), 100)
+        logger.debug(f"开始等待 main {current_thread().name} eventLoop: {id(asyncio.get_running_loop())}")
         entity = await req.await_result()
-        logger.info(f"c: res{entity} {entity.get_data_as_string()}")
+        logger.debug(f"等待结束 main {current_thread().name} eventLoop: {id(asyncio.get_running_loop())}")
+        logger.info(f"c: res{entity} {entity.data_as_string()}")
         await asyncio.sleep(1)
 
     def start(self):
         super().start()
+        # self.loop.set_debug(True)
         self.loop.run_until_complete(self._start())
 
     async def _stop(self):

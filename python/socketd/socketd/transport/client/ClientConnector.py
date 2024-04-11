@@ -1,22 +1,23 @@
 from abc import ABC, abstractmethod
 
+from socketd.transport.client.ClientConfig import ClientConfig
+from socketd.transport.core.ChannelInternal import ChannelInternal
+
 
 class ClientConnector(ABC):
+
     @abstractmethod
-    def heartbeatHandler(self):
+    def get_config(self) -> ClientConfig:
         ...
 
     @abstractmethod
-    def heartbeatInterval(self) -> int:
+    def auto_reconnect(self) -> bool:
         ...
 
     @abstractmethod
-    def autoReconnect(self):
+    async def connect(self) -> ChannelInternal:
         ...
 
     @abstractmethod
-    async def connect(self):
-        ...
-
     async def close(self):
         ...

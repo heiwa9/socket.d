@@ -2,16 +2,22 @@ package features;
 
 import features.cases.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.noear.solon.test.SolonJUnit5Extension;
+import org.noear.solon.test.SolonTest;
 
 /**
  * @author noear
  * @since 2.0
  */
+@ExtendWith(SolonJUnit5Extension.class)
+@SolonTest
 public class CaseTest {
     static final String[] schemas = new String[]{
             "sd:tcp-java",
             "sd:tcp-netty",
             "sd:tcp-smartsocket",
+//            "sd:tcp-neta",
             "sd:ws-java",
             "sd:udp-java",
 //            "sd:udp-netty",
@@ -23,6 +29,22 @@ public class CaseTest {
         for (int i = 0; i < schemas.length; i++) {
             String s1 = schemas[i];
             BaseTestCase testCase = new TestCase01_client_send(s1, 1000 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase02_handshake() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+            BaseTestCase testCase = new TestCase02_handshake(s1, 1020 + i);
             try {
                 testCase.start();
                 testCase.stop();
@@ -358,6 +380,125 @@ public class CaseTest {
             String s1 = schemas[i];
 
             BaseTestCase testCase = new TestCase30_meta_auth(s1, 3000 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase31_openAnTry() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            BaseTestCase testCase = new TestCase31_openAnTry(s1, 3100 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase32_openAnTry2() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            BaseTestCase testCase = new TestCase32_openAnTry2(s1, 3200 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase33_closeStarting() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            BaseTestCase testCase = new TestCase33_closeStarting(s1, 3300 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase34_inner_close() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            BaseTestCase testCase = new TestCase34_inner_close(s1, 3400 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase35_sendAlarm() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            BaseTestCase testCase = new TestCase35_sendAlarm(s1, 3500 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase36_sendAlarm_async() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            BaseTestCase testCase = new TestCase36_sendAlarm_async(s1, 3600 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase37_closeStartingOfServer() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            BaseTestCase testCase = new TestCase37_closeStartingOfServer(s1, 3700 + i);
             try {
                 testCase.start();
                 testCase.stop();

@@ -1,14 +1,16 @@
 package org.noear.socketd.transport.stream.impl;
 
-import org.noear.socketd.exception.SocketdException;
-import org.noear.socketd.exception.SocketdTimeoutException;
+import org.noear.socketd.exception.SocketDException;
+import org.noear.socketd.exception.SocketDTimeoutException;
 import org.noear.socketd.transport.core.*;
 import org.noear.socketd.transport.stream.RequestStream;
 import org.noear.socketd.utils.IoConsumer;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 
 /**
  * 请求流
@@ -33,6 +35,18 @@ public class RequestStreamImpl extends StreamBase<RequestStream> implements Requ
     }
 
     /**
+     * 出错时
+     */
+    @Override
+    public void onError(Throwable error) {
+        if (doOnError != null) {
+            doOnError.accept(error);
+        }
+
+        future.completeExceptionally(error);
+    }
+
+    /**
      * 答复时
      */
     @Override
@@ -45,9 +59,17 @@ public class RequestStreamImpl extends StreamBase<RequestStream> implements Requ
         try {
             return future.get(timeout(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            throw new SocketdTimeoutException("Request reply timeout > " + timeout() + ", sid=" + sid());
+            throw new SocketDTimeoutException("Request reply timeout > " + timeout() + ", sid=" + sid());
         } catch (Throwable e) {
-            throw new SocketdException("Request failed, sid=" + sid(), e);
+            if (e instanceof ExecutionException) {
+                e = e.getCause();
+            }
+
+            if (e instanceof SocketDException) {
+                throw (SocketDException) e;
+            } else {
+                throw new SocketDException("Request failed, sid=" + sid(), e);
+            }
         }
     }
 

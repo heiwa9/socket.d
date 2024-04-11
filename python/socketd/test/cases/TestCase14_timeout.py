@@ -2,7 +2,7 @@
 import asyncio
 import uuid
 
-from socketd.SocketD import SocketD
+from socketd import SocketD
 from socketd.transport.client.ClientConfig import ClientConfig
 from test.modelu.BaseTestCase import BaseTestCase
 
@@ -16,13 +16,11 @@ from test.modelu.SimpleListenerTest import SimpleListenerTest, config_handler
 from loguru import logger
 
 
-def c_config_handler(config: ServerConfig | ClientConfig) -> ServerConfig | ClientConfig:
-    config.set_is_thread(True)
-    config.set_idle_timeout(10)
+def c_config_handler(config: ServerConfig | ClientConfig):
+    config.is_thread(True)
+    config.idle_timeout(10000)
     config.auto_reconnect(False)
     # config.set_logger_level("DEBUG")
-    config.id_generator(uuid.uuid4)
-    return config
 
 
 class TestCase14_timeout(BaseTestCase):
@@ -36,7 +34,7 @@ class TestCase14_timeout(BaseTestCase):
 
     async def _start(self):
         s = SimpleListenerTest()
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).set_port(self.port))
+        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
         self.server_session: WebSocketServer = await self.server.config(config_handler).listen(
             s).start()
         await asyncio.sleep(1)

@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import sys
 import time
 
@@ -9,6 +10,7 @@ from socketd.transport.utils.AsyncUtil import AsyncUtil
 from loguru import logger
 
 from socketd.transport.utils.async_api.AtomicRefer import AtomicRefer
+from test.uitls import calc_async_time
 
 
 class FutureTest(unittest.TestCase):
@@ -43,6 +45,7 @@ class FutureTest(unittest.TestCase):
         asyncio.run(_run())
 
     def test_call_later(self):
+        """阻塞"""
         results = []
 
         def callback(arg):
@@ -55,6 +58,7 @@ class FutureTest(unittest.TestCase):
         print(results)
 
     def test_loop(self):
+
         def _run(_loop: asyncio.AbstractEventLoop):
             asyncio.set_event_loop(_loop)
             _loop.run_forever()
@@ -63,14 +67,14 @@ class FutureTest(unittest.TestCase):
             for _ in range(10):
                 print("_")
             _loop.stop()
+            return True
 
         loop = asyncio.new_event_loop()
         t = Thread(target=_run, args=(loop,))
         t.start()
-        asyncio.run_coroutine_threadsafe(_handle(loop), loop)
+        Future = asyncio.run_coroutine_threadsafe(_handle(loop), loop)
         for _ in range(10):
-            print("1")
-            time.sleep(0.1)
+            print(_)
 
     def test_loop1(self):
         logger.info("test_loop1")
@@ -94,10 +98,10 @@ class FutureTest(unittest.TestCase):
         async def main(_top):
             await _run("one", _top)
             if not top.done():
-                top.set_result(0)  # 程序中止，遇到下一个await后续丢失
+                top.cancel()  # 程序中止，遇到下一个await后续丢失
 
         logger.remove()
-        for i in range(100000):
+        for i in range(10):
             # 讲异步任务提交到事件循环中
             asyncio.run_coroutine_threadsafe(_run("two", top), loop)
             # loop.run_until_complete(_run("two", top))
@@ -134,7 +138,7 @@ class FutureTest(unittest.TestCase):
             await asyncio.sleep(0)
             logger.info(f"{asyncio.get_event_loop().time() - _time}")
             asyncio.run_coroutine_threadsafe(_hand(top), loop)
-            loop.stop()
+            # loop.stop()
             # top2.set_result(1)
             for _ in range(10):
                 logger.info("1")
@@ -142,3 +146,85 @@ class FutureTest(unittest.TestCase):
 
         asyncio.run(main())
 
+    def test_task(self):
+        async def function_A():
+            print("Function A started at", time.strftime('%X'))
+            await asyncio.sleep(1)
+            print("Function A ended at", time.strftime('%X'))
+
+        async def function_B():
+            print("Function B started at", time.strftime('%X'))
+            await asyncio.sleep(3)
+            print("Function B ended at", time.strftime('%X'))
+
+        @calc_async_time
+        async def main():
+            # 启动两个函数的协程
+            task_A = asyncio.create_task(function_A())
+            task_B = asyncio.create_task(function_B())
+            print(" await ...")
+            # 等待两个函数完成
+            await asyncio.gather(task_A, task_B)
+
+        asyncio.run(main())
+
+    def test_warp(self):
+
+        async def get(data):
+            print(data)
+
+        async def _main(func):
+            await func(1)
+
+        asyncio.run(_main(get))
+
+    def test_send(self):
+        async def send():
+            await asyncio.sleep(2)
+            a = yield
+            print(a)
+            yield
+
+        async def _main():
+            s = send()
+            await anext(s, 1)
+            await anext(s, 2)
+
+        asyncio.run(_main())
+
+    def testTask(self):
+        """
+        多线程混合运行异步函数
+        :return:
+        """
+        loop = asyncio.new_event_loop()
+        stop = AsyncUtil.run_forever(loop, daemon=True)
+
+        async def task():
+            num = AtomicRefer(0)
+
+            async def send(_num):
+                await asyncio.sleep(1)
+                logger.info(1)
+                async with _num as _n:
+                    await _num.set(_n + 1)
+                return 1
+
+            tasks = []
+            for t in range(1000):
+                # asyncio.run_coroutine_threadsafe(send(num), loop)
+                task = loop.create_task(send(num))
+                tasks.append(task)
+            f = asyncio.run_coroutine_threadsafe(asyncio.wait(tasks), loop)
+            await asyncio.sleep(1)
+            try:
+                f.result()
+            except TimeoutError as e:
+                f.cancel()
+                logger.error(e)
+            loop.stop()
+            logger.info("num : {}".format(await num.get()))
+            assert await num.get() == 1000
+            stop.set_result(True)
+
+        asyncio.run(task())

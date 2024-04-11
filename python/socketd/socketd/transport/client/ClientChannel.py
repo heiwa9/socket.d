@@ -1,132 +1,192 @@
 import asyncio
-from abc import ABC
 from asyncio import Future
 
-from socketd.transport.utils.AssertsUtil import AssertsUtil
-from socketd.transport.core.internal.ChannelBase import ChannelBase
+from socketd.exception.SocketDExecption import SocketDException, SocketDChannelException
+from socketd.transport.client.Client import ClientInternal
+from socketd.transport.core.Asserts import Asserts
+from socketd.transport.core.ChannelInternal import ChannelInternal
+from socketd.transport.core.Costants import Constants
+from socketd.transport.core.impl.SessionDefault import SessionDefault
+from socketd.transport.stream.StreamManger import StreamInternal
+from socketd.transport.core.impl.ChannelBase import ChannelBase
 from socketd.transport.client.ClientConnector import ClientConnector
 from loguru import logger
 
-from socketd.transport.core.Channel import Channel
-from socketd.transport.utils.AsyncUtil import AsyncUtil
-from socketd.transport.core.internal.HeartbeatHandlerDefault import HeartbeatHandlerDefault
+from socketd.transport.client.ClientHeartbeatHandler import ClientHeartbeatHandlerDefault
+from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
 
 
-class ClientChannel(ChannelBase, ABC):
-    def __init__(self, real: Channel, connector: ClientConnector):
-        super().__init__(real.get_config())
-        self.real: Channel = real
-        self.connector: ClientConnector = connector
-        self.heartbeatHandler = connector.heartbeatHandler()
-        self._heartbeatScheduledFuture: Future | None = None
+class ClientChannel(ChannelBase):
+    def __init__(self, client: ClientInternal, connector: ClientConnector):
+        super().__init__(connector.get_config())
+        self.__client = client
+        self.__connector: ClientConnector = connector
+        self.__sessionShell = SessionDefault(self)
 
-        if self.heartbeatHandler is None:
-            self.heartbeatHandler = HeartbeatHandlerDefault()
+        self.__real: ChannelInternal | None = None
+        self.__heartbeatScheduledFuture: Future | None = None
 
-        self._loop = asyncio.new_event_loop()
-        self.initHeartbeat()
+        if client.get_heartbeat_handler():
+            self.__heartbeatHandler: type[ClientHeartbeatHandlerDefault] = client.get_heartbeat_handler()
+        else:
+            self.__heartbeatHandler = ClientHeartbeatHandlerDefault
+
+        self.__isConnecting = AtomicRefer(False)
+
+        self.init_heartbeat()
 
     def __del__(self):
         try:
-            if self._loop:
-                self._loop.stop()
+            if not self.__heartbeatScheduledFuture.done():
+                self.__heartbeatScheduledFuture.cancel()
         except Exception as e:
             logger.warning(e)
 
-    def is_valid(self):
-        if self.real is None:
-            return False
-        else:
-            return self.real.is_valid()
+    async def __heartbeatScheduled(self) -> None:
+        while True:
+            await asyncio.sleep(self.__client.get_heartbeat_interval() / 1000)
+            await self.heartbeat_handle()
 
-    def is_closed(self):
-        if self.real is None:
-            return False
-        else:
-            return self.real.is_closed()
+    def init_heartbeat(self):
+        if self.__heartbeatScheduledFuture:
+            self.__heartbeatScheduledFuture.cancel()
 
-    def get_remote_address(self):
-        if self.real is None:
-            return None
-        else:
-            return self.real.get_remote_address()
-
-    def get_local_address(self):
-        if self.real is None:
-            return None
-        else:
-            return self.real.get_local_address()
-
-    def initHeartbeat(self):
-        if self._heartbeatScheduledFuture is not None:
-            self._heartbeatScheduledFuture.cancel()
-
-        if self.connector.autoReconnect():
-            async def _heartbeatScheduled():
-                while True:
-                    await asyncio.sleep(self.connector.heartbeatInterval())
-                    await self.heartbeat_handle()
-
-            self._heartbeatScheduledFuture = asyncio.create_task(_heartbeatScheduled())
-            self.get_config().get_executor().submit(lambda:
-                                                    AsyncUtil.thread_handler(self._loop,
-                                                                             self._heartbeatScheduledFuture))
+        if self.__connector.auto_reconnect():
+            self.__heartbeatScheduledFuture = asyncio.create_task(self.__heartbeatScheduled())
 
     async def heartbeat_handle(self):
-        AssertsUtil.assert_closed(self.real)
+        if self.__real:
+            if self.__real.get_handshake() is None:
+                return
+
+            if Asserts.is_closed_and_end(self.__real):
+                logger.debug("Client channel is closed (pause heartbeat), sessionId=" + self.get_session().session_id())
+                await self.close(self.__real.is_closed())
+                return
+
+            if self.__real.is_closing():
+                return
 
         with self:
             try:
-                await self.prepare_check()
-                await self.heartbeatHandler.heartbeat(self.get_session())
+                await self.internalCheck()
+                await self.__heartbeatHandler(self.get_session())
             except Exception as e:
-                if self.connector.autoReconnect():
-                    await self.real.close()
-                    self.real = None
+                if self.__connector.auto_reconnect():
+                    if self.__real:
+                        await self.__real.close(code=Constants.CLOSE2001_ERROR)
+                    self.__real = None
                 raise e
 
-    async def send(self, frame, acceptor):
-        AssertsUtil.assert_closed(self.real)
-        with self:
-            try:
-                await self.prepare_check()
-                await self.real.send(frame, acceptor)
-            except Exception as e:
-                if self.connector.autoReconnect():
-                    await self.real.close()
-                    self.real = None
-                # raise e
+    def is_valid(self):
+        if self.__real is None:
+            return False
+        else:
+            return self.__real.is_valid()
 
-    async def retrieve(self, frame, on_error):
-        await self.real.retrieve(frame, on_error)
+    def is_closed(self):
+        if self.__real is None:
+            return False
+        else:
+            return self.__real.is_closed()
 
-    def get_session(self):
-        return self.real.get_session()
+    def get_remote_address(self):
+        if self.__real is None:
+            return None
+        else:
+            return self.__real.get_remote_address()
 
-    async def close(self, code: int = 1000,
-                    reason: str = "", ):
+    def get_local_address(self):
+        if self.__real is None:
+            return None
+        else:
+            return self.__real.get_local_address()
+
+    async def send(self, frame, stream: StreamInternal):
+        Asserts.assert_closed_and_end(self.__real)
+
         try:
-            await super().close(code, reason)
-            self._heartbeatScheduledFuture.cancel()
-            if self.real is not None:
-                await self.real.close()
-            await self.connector.close()
+            await self.internalCheck()
+
+            if self.__real is None:
+                # 销毁心跳任务
+                self.__heartbeatScheduledFuture.cancel()
+                raise SocketDChannelException("Client channel is not connected")
+
+            await self.__real.send(frame, stream)
+        except SocketDException as s:
+            raise s
+        except Exception as e:
+            if self.__connector.auto_reconnect():
+                await self.internalCloseIfError()
+
+            raise SocketDChannelException(f"Client channel send failed {e}")
+
+    async def retrieve(self, frame, stream: StreamInternal):
+        await self.__real.retrieve(frame, stream)
+
+    async def close(self, code):
+        try:
+            if self.__heartbeatScheduledFuture:
+                self.__heartbeatScheduledFuture.cancel()
+
+            if self.__connector:
+                await self.__connector.close()
+
+            if self.__real:
+                await self.__real.close(code)
         except Exception as e:
             logger.error(e)
+        finally:
+            await super().close(code)
 
-    async def prepare_check(self):
-        if self.real is None or not self.real.is_valid():
-            self.real = await self.connector.connect()
+    def get_session(self):
+        return self.__sessionShell
+
+    def on_error(self, error: Exception):
+        self.__real.on_error(error)
+
+    async def reconnect(self):
+        self.init_heartbeat()
+        await self.internalCheck()
+
+    @logger.catch
+    async def connect(self):
+        with self.__isConnecting as isConnected:
+            if isConnected:
+                return
+            else:
+                self.__isConnecting.set(True)
+
+        try:
+            if self.__real:
+                await self.__real.close(Constants.CLOSE2002_RECONNECT)
+
+            self.__real = await self.__client.get_connect_handler()(self.__connector)
+            self.__real.set_session(self.__sessionShell)
+            self.set_handshake(self.__real.get_handshake())
+        except TimeoutError as t:
+            logger.error(f"socketD connect timed out: {t}")
+        except Exception as e:
+            logger.error(e)
+            raise SocketDChannelException(f"socketD connect")
+        finally:
+            self.__isConnecting.set(False)
+
+    async def internalCloseIfError(self):
+        if self.__real:
+            await self.__real.close(Constants.CLOSE2001_ERROR)
+            self.__real = None
+
+    async def internalCheck(self):
+        if self.__real is None or self.__real.is_valid() == False:
+            await self.connect()
             return True
         else:
             return False
 
-    def get_real(self):
-        return self.real
+    def is_closing(self) -> bool:
+        return self.__real.is_closing() if self.__real else 0
 
-    def on_error(self, error: Exception):
-        pass
-
-    async def reconnect(self):
-        self.initHeartbeat()
-        await self.prepare_check()
+    def get_live_time(self) -> int:
+        return self.__real.get_live_time() if self.__real else 0

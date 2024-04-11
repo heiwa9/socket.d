@@ -2,8 +2,8 @@ import {MessageBuilder, MessageInternal} from "./Message";
 import {EntityDefault} from "./Entity";
 import {Frame} from "./Frame";
 import {FragmentHolder} from "./FragmentHolder";
-import {EntityMetas} from "./Constants";
-import {SocketdCodecException} from "../../exception/SocketdException";
+import {EntityMetas} from "./EntityMetas";
+import {SocketDCodecException} from "../../exception/SocketDException";
 
 
 /**
@@ -60,7 +60,7 @@ export class FragmentAggregatorDefault implements FragmentAggregator {
         const dataLengthStr = main.meta(EntityMetas.META_DATA_LENGTH);
 
         if (!dataLengthStr) {
-            throw new SocketdCodecException("Missing '" + EntityMetas.META_DATA_LENGTH + "' meta, event=" + main.event());
+            throw new SocketDCodecException("Missing '" + EntityMetas.META_DATA_LENGTH + "' meta, event=" + main.event());
         }
 
         this._dataLength = parseInt(dataLengthStr);

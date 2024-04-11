@@ -2,7 +2,7 @@ package features.cases;
 
 import org.junit.jupiter.api.Assertions;
 import org.noear.socketd.SocketD;
-import org.noear.socketd.exception.SocketdChannelException;
+import org.noear.socketd.exception.SocketDChannelException;
 import org.noear.socketd.transport.client.ClientSession;
 import org.noear.socketd.transport.core.Message;
 import org.noear.socketd.transport.core.Session;
@@ -65,7 +65,7 @@ public class TestCase12_client_session_close extends BaseTestCase {
 
         //client
         String serverUrl = getSchema() + "://127.0.0.1:" + getPort() + "/path?u=a&p=2";
-        clientSession = SocketD.createClient(serverUrl).open();
+        clientSession = SocketD.createClient(serverUrl).openOrThow();
 
         clientSession.send("/user/created", new StringEntity("hi"));
 
@@ -83,7 +83,7 @@ public class TestCase12_client_session_close extends BaseTestCase {
 
         try {
             clientSession.send("/user/created", new StringEntity("hi"));
-        } catch (SocketdChannelException e) {
+        } catch (SocketDChannelException e) {
 
         }
 

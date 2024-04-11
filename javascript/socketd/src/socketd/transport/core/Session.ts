@@ -4,6 +4,7 @@ import type {Channel} from "./Channel";
 import {RequestStream, SendStream, SubscribeStream} from "../stream/Stream";
 import type {ClientSession} from "../client/ClientSession";
 import type {Handshake} from "./Handshake";
+import {SocketAddress} from "./SocketAddress";
 
 
 /**
@@ -13,6 +14,16 @@ import type {Handshake} from "./Handshake";
  * @since 2.0
  */
 export interface Session extends ClientSession {
+    /**
+     * 获取远程地址
+     */
+    remoteAddress(): SocketAddress | null;
+
+    /**
+     * 获取本地地址
+     */
+    localAddress(): SocketAddress | null;
+
     /**
      * 最后活动时间
      */
@@ -28,14 +39,14 @@ export interface Session extends ClientSession {
      *
      * @since 2.1
      */
-    name(): string | undefined;
+    name(): string | null;
 
     /**
      * 获取握手参数
      *
      * @param name 名字
      */
-    param(name: string): string | undefined;
+    param(name: string): string | null;
 
     /**
      * 获取握手参数或默认值
@@ -125,10 +136,11 @@ export interface Session extends ClientSession {
 export abstract class SessionBase implements Session {
     protected _channel: Channel;
     private _sessionId: string;
-    private _attrMap: Map<string, object>;
+    private _attrMap: Map<string, object> | null;
 
     constructor(channel: Channel) {
         this._channel = channel;
+        this._attrMap = null;
         this._sessionId = this.generateId();
     }
 
@@ -140,8 +152,9 @@ export abstract class SessionBase implements Session {
         return this._channel.getLiveTime();
     }
 
-    name(): string | undefined {
-        return this.param("@");
+    name(): string | null {
+        let tmp = this.param("@");
+        return tmp ? tmp : null;
     }
 
     attrMap(): Map<string, any> {
@@ -177,9 +190,14 @@ export abstract class SessionBase implements Session {
         this.attrMap().set(name, val);
     }
 
+
     abstract handshake(): Handshake ;
 
-    abstract param(name: string): string | undefined;
+    abstract remoteAddress(): SocketAddress | null;
+
+    abstract localAddress(): SocketAddress | null;
+
+    abstract param(name: string): string | null;
 
     abstract paramOrDefault(name: string, def: string): string;
 
@@ -197,6 +215,8 @@ export abstract class SessionBase implements Session {
 
     abstract isValid(): boolean ;
 
+    abstract isClosing(): boolean;
+
     abstract reconnect();
 
     abstract send(event: string, entity: Entity): SendStream;
@@ -205,9 +225,13 @@ export abstract class SessionBase implements Session {
 
     abstract sendAndSubscribe(event: string, entity: Entity, timeout?: number): SubscribeStream;
 
+    abstract closeStarting();
+
+    abstract preclose();
+
     abstract close();
 
     protected generateId() {
-        return this._channel.getConfig().getIdGenerator().generate();
+        return this._channel.getConfig().genId();
     }
 }

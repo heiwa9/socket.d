@@ -1,23 +1,24 @@
 import asyncio
-from typing import Any
+from typing import Any, Optional
 from asyncio import Future
 
+from socketd.transport.core.HandshakeDefault import HandshakeDefault
 from socketd.transport.core.Session import Session
 from socketd.transport.core.Config import Config
 from socketd.transport.core.Frame import Frame
 from socketd.transport.core.Message import Message
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
-from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
+from socketd.transport.stream.StreamManger import StreamInternal
 
 
-class Channel:
+class Channel(ABC):
     @abstractmethod
     def get_attachment(self, name: str) -> Any:
         ...
 
     @abstractmethod
-    def set_attachment(self, name: str, val: Any) -> None:
+    def put_attachment(self, name: str, val: Any) -> None:
         ...
 
     @abstractmethod
@@ -25,16 +26,17 @@ class Channel:
         ...
 
     @abstractmethod
-    def is_closed(self) -> bool:
+    def is_closing(self) -> bool:
+        ...
+
+    @abstractmethod
+    def is_closed(self) -> int:
         ...
 
     @abstractmethod
     def get_config(self) -> Config:
         ...
 
-    @abstractmethod
-    def get_requests(self) -> AtomicRefer:
-        ...
 
     @abstractmethod
     def set_handshake(self, handshake: 'HandshakeDefault') -> None:
@@ -53,15 +55,11 @@ class Channel:
         ...
 
     @abstractmethod
-    def set_live_time(self) -> None:
-        ...
-
-    @abstractmethod
     def get_live_time(self) -> int:
         ...
 
     @abstractmethod
-    async def send_connect(self, url: str) -> None:
+    async def send_connect(self, url: str,  metaMap: dict) -> None:
         ...
 
     @abstractmethod
@@ -77,30 +75,38 @@ class Channel:
         ...
 
     @abstractmethod
-    async def send_close(self) -> None:
+    async def send_close(self, code:int) -> None:
         ...
 
     @abstractmethod
-    async def send(self, frame: 'Frame', stream: 'StreamInternal') -> None:
+    async def send_alarm(self, _from: Message, alarm:str) -> None:
         ...
 
     @abstractmethod
-    async def retrieve(self, frame: Frame, stream: 'StreamInternal') -> None:
+    async def send(self, frame: 'Frame', stream: Optional[StreamInternal]) -> None:
+        ...
+
+    @abstractmethod
+    def retrieve(self, frame: Frame, stream: StreamInternal) -> None:
         ...
 
     @abstractmethod
     def get_session(self) -> Session:
         ...
 
-    async def close(self, code: int = 1000,
-                    reason: str = "", ):
+    @abstractmethod
+    async def close(self, code):
         ...
 
+    @abstractmethod
     def on_error(self, error: Exception):
         ...
 
+    @abstractmethod
     def reconnect(self) -> Future | None: ...
 
+    @abstractmethod
     def get_loop(self) -> asyncio.AbstractEventLoop: ...
 
+    @abstractmethod
     def set_loop(self, loop) -> None: ...

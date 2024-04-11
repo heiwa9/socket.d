@@ -1,13 +1,17 @@
-import { Channel, ChannelBase } from "../core/Channel";
+import {Channel, ChannelBase, ChannelInternal} from "../core/Channel";
 import type { Frame } from "../core/Frame";
 import type { Session } from "../core/Session";
 import type { StreamInternal } from "../stream/Stream";
 import type { ClientConnector } from "./ClientConnector";
-import { HeartbeatHandler, HeartbeatHandlerDefault} from "../core/HeartbeatHandler";
 import { Constants } from "../core/Constants";
 import { Asserts } from "../core/Asserts";
-import { SocketdChannelException, SocketdException } from "../../exception/SocketdException";
+import { SocketDChannelException, SocketDException } from "../../exception/SocketDException";
 import {RunUtils} from "../../utils/RunUtils";
+import {SessionDefault} from "../core/SessionDefault";
+import {SocketAddress} from "../core/SocketAddress";
+import {ClientHeartbeatHandler, ClientHeartbeatHandlerDefault} from "./ClientHeartbeatHandler";
+import {ClientInternal} from "./Client";
+import {ClientConnectHandler, ClientConnectHandlerDefault} from "./ClientConnectHandler";
 
 /**
  * 客户端通道
@@ -16,22 +20,31 @@ import {RunUtils} from "../../utils/RunUtils";
  * @since 2.0
  */
 export class ClientChannel extends ChannelBase implements Channel {
+    //客户端
+    private _client: ClientInternal;
+    //连接器
     private _connector: ClientConnector;
-    private _real: Channel | null;
-    private _heartbeatHandler: HeartbeatHandler;
+    //会话壳
+    private _sessionShell: Session;
+    //真实通道
+    private _real: ChannelInternal | null;
+    //连接处理
+    private _connectHandler : ClientConnectHandler;
+    //心跳处理
+    private _heartbeatHandler: ClientHeartbeatHandler;
+    //心跳调度
     private _heartbeatScheduledFuture: any;
+    //连接状态
+    private _isConnecting: boolean = false;
 
-    constructor(real: Channel, connector: ClientConnector) {
-        super(real.getConfig());
-
+    constructor(client: ClientInternal, connector: ClientConnector) {
+        super(connector.getConfig());
+        this._client = client;
         this._connector = connector;
-        this._real = real;
+        this._sessionShell = new SessionDefault(this);
 
-        if (connector.heartbeatHandler() == null) {
-            this._heartbeatHandler = new HeartbeatHandlerDefault(null);
-        } else {
-            this._heartbeatHandler = new HeartbeatHandlerDefault(connector.heartbeatHandler());
-        }
+        this._connectHandler = new ClientConnectHandlerDefault(client.getConnectHandler());
+        this._heartbeatHandler = new ClientHeartbeatHandlerDefault(client.getHeartbeatHandler());
 
         this.initHeartbeat();
     }
@@ -45,13 +58,13 @@ export class ClientChannel extends ChannelBase implements Channel {
         }
 
         if (this._connector.autoReconnect()) {
-            this._heartbeatScheduledFuture = setInterval(() => {
+            this._heartbeatScheduledFuture = setInterval(async () => {
                 try {
-                    this.heartbeatHandle();
+                    await this.heartbeatHandle();
                 } catch (e) {
-                    console.warn("Client channel heartbeat error", e);
+                    console.debug("Client channel heartbeat failed: {link=" + this._connector.getConfig().getLinkUrl() + "}");
                 }
-            }, this._connector.heartbeatInterval());
+            }, this._client.getHeartbeatInterval());
         }
     }
 
@@ -59,51 +72,43 @@ export class ClientChannel extends ChannelBase implements Channel {
      * 心跳处理
      */
     async heartbeatHandle() {
-        if (this._real != null) {
+        if (this._real) {
             //说明握手未成
             if (this._real.getHandshake() == null) {
                 return;
             }
 
-            //手动关闭
-            if (this._real.isClosed() == Constants.CLOSE4_USER) {
+            //关闭并结束了
+            if (Asserts.isClosedAndEnd(this._real)) {
                 console.debug(`Client channel is closed (pause heartbeat), sessionId=${this.getSession().sessionId()}`);
+                //可能是被内层的会话关闭的，跳过了外层
+                this.close(this._real.isClosed());
+                return;
+            }
+
+            //或者正在关闭中
+            if (this._real.isClosing()) {
                 return;
             }
         }
 
         try {
-            await this.prepareCheck();
+            await this.internalCheck();
 
-            this._heartbeatHandler.heartbeat(this.getSession());
+            this._heartbeatHandler.clientHeartbeat(this.getSession());
         } catch (e) {
-            if (e instanceof SocketdException) {
+            if (e instanceof SocketDException) {
                 throw e;
             }
 
             if (this._connector.autoReconnect()) {
-                this._real!.close(Constants.CLOSE3_ERROR);
-                this._real = null;
+                this.internalCloseIfError();
             }
 
-            throw new SocketdChannelException(e);
+            throw e;
         }
     }
 
-    /**
-     * 预备检测
-     *
-     * @return 是否为新链接
-     */
-    async prepareCheck(): Promise<boolean> {
-        if (this._real == null || this._real.isValid() == false) {
-            this._real = await this._connector.connect();
-
-            return true;
-        } else {
-            return false;
-        }
-    }
 
     /**
      * 是否有效
@@ -113,6 +118,17 @@ export class ClientChannel extends ChannelBase implements Channel {
             return false;
         } else {
             return this._real.isValid();
+        }
+    }
+
+    /**
+     * 是否关闭中
+     */
+    isClosing() {
+        if (this._real == null) {
+            return false;
+        } else {
+            return this._real.isClosing();
         }
     }
 
@@ -135,37 +151,67 @@ export class ClientChannel extends ChannelBase implements Channel {
         }
     }
 
+    getRemoteAddress(): SocketAddress | null {
+        if (this._real) {
+            return  this._real.getRemoteAddress();
+        } else {
+            return null;
+        }
+    }
+
+    getLocalAddress(): SocketAddress | null {
+        if (this._real) {
+            return  this._real.getLocalAddress();
+        } else {
+            return null;
+        }
+    }
+
     /**
      * 发送
      *
      * @param frame  帧
      * @param stream 流（没有则为 null）
      */
-    async send(frame: Frame, stream: StreamInternal<any>){
-        Asserts.assertClosedByUser(this._real);
+    send(frame: Frame, stream: StreamInternal<any>) {
+        Asserts.assertClosedAndEnd(this._real);
 
-        try {
-            await this.prepareCheck();
-
-            this._real!.send(frame, stream);
-        } catch (e) {
+        this.internalCheck().then(res => {
+            if (this._real) {
+                try {
+                    this._real!.send(frame, stream);
+                } catch (err) {
+                    if (stream) {
+                        // @ts-ignore
+                        stream.onError(err);
+                    }
+                }
+            } else {
+                //有可能此时仍未连接
+                const err = new SocketDChannelException("Client channel is not connected");
+                if (stream) {
+                    stream.onError(err);
+                }
+            }
+        }, err => {
             if (this._connector.autoReconnect()) {
-                this._real!.close(Constants.CLOSE3_ERROR);
-                this._real = null;
+                this.internalCloseIfError();
             }
 
-            throw e;
-        }
+            if (stream) {
+                stream.onError(err);
+            }
+        });
     }
 
     retrieve(frame: Frame, stream: StreamInternal<any> | null) {
         this._real!.retrieve(frame, stream);
     }
 
-    reconnect() {
+    async reconnect() {
         this.initHeartbeat();
 
-        this.prepareCheck();
+        await this.internalCheck();
     }
 
     onError(error: any) {
@@ -182,6 +228,50 @@ export class ClientChannel extends ChannelBase implements Channel {
     }
 
     getSession(): Session {
-        return this._real!.getSession();
+        return this._sessionShell;
+    }
+
+    async connect() {
+        if (this._isConnecting) {
+            return;
+        } else {
+            this._isConnecting = true;
+        }
+
+        try {
+            if (this._real != null) {
+                this._real.close(Constants.CLOSE2002_RECONNECT);
+            }
+
+            this._real = await this._connectHandler.clientConnect(this._connector);
+            //原始 session 切换为带壳的 session
+            this._real.setSession(this._sessionShell);
+            //同步握手信息
+            this.setHandshake(this._real.getHandshake());
+        } finally {
+            this._isConnecting = false;
+        }
+    }
+
+    private internalCloseIfError() {
+        if (this._real != null) {
+            this._real.close(Constants.CLOSE2001_ERROR);
+            this._real = null;
+        }
+    }
+
+    /**
+     * 预备检测
+     *
+     * @return 是否为新链接
+     */
+    private async internalCheck(): Promise<boolean> {
+        if (this._real == null || this._real.isValid() == false) {
+            await this.connect();
+
+            return true;
+        } else {
+            return false;
+        }
     }
 }

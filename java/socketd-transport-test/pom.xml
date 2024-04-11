@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.noear</groupId>
         <artifactId>socketd-parent</artifactId>
-        <version>2.3.6</version>
+        <version>2.4.9</version>
         <relativePath>../socketd-parent/pom.xml</relativePath>
     </parent>
 
@@ -16,6 +16,7 @@
 
     <properties>
         <jmh.version>1.25</jmh.version>
+        <solon.version>2.7.2</solon.version>
     </properties>
 
     <dependencies>
@@ -51,15 +52,35 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>socketd-transport-neta</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>socketd-transport-smartsocket</artifactId>
         </dependency>
 
-<!--        <dependency>-->
-<!--            <groupId>org.slf4j</groupId>-->
-<!--            <artifactId>slf4j-simple</artifactId>-->
-<!--            <version>${slf4j.version}</version>-->
-<!--            <scope>test</scope>-->
-<!--        </dependency>-->
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-lib</artifactId>
+            <version>${solon.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon.logging.simple</artifactId>
+            <version>${solon.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon.web.flux</artifactId>
+            <version>${solon.version}</version>
+            <scope>test</scope>
+        </dependency>
+
 
         <dependency>
             <groupId>io.projectreactor</groupId>
@@ -68,22 +89,10 @@
         </dependency>
 
         <dependency>
-            <groupId>org.openjdk.jmh</groupId>
-            <artifactId>jmh-core</artifactId>
-            <version>${jmh.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.openjdk.jmh</groupId>
-            <artifactId>jmh-generator-annprocess</artifactId>
-            <version>${jmh.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>${junit5.version}</version>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-test-junit5</artifactId>
+            <version>${solon.version}</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

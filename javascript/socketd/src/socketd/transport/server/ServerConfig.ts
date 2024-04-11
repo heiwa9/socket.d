@@ -1,21 +1,27 @@
 import {ConfigBase} from "../core/Config";
 
 export class ServerConfig extends ConfigBase {
-    private _schema: string;
+    private readonly _schema: string;
+    private readonly _schemaCleaned: string;
 
     //主机名
     private _host: string;
     //端口
     private _port: number;
+    //http server
+    private _httpServer: any;
 
     constructor(schema: string) {
         super(false);
+
+        this._schema = schema;
+
         //支持 sd: 开头的架构
         if (schema.startsWith("sd:")) {
             schema = schema.substring(3);
         }
 
-        this._schema = schema;
+        this._schemaCleaned = schema;
 
         this._host = "";
         this._port = 8602;
@@ -34,6 +40,21 @@ export class ServerConfig extends ConfigBase {
      */
     getHost(): string {
         return this._host;
+    }
+
+    /**
+     * 获取 http-server
+     * */
+    getHttpServer(): any {
+        return this._httpServer;
+    }
+
+    /**
+     * 配置 http-server（可共用端口）
+     * */
+    httpServer(httpServer: any): this {
+        this._httpServer = httpServer;
+        return this;
     }
 
     /**
@@ -64,22 +85,24 @@ export class ServerConfig extends ConfigBase {
      */
     getLocalUrl(): string {
         if (this._host) {
-            return "sd:" + this._schema + "://127.0.0.1:" + this._port;
+            return "sd:" + this._schemaCleaned + "://" + this._host + ":" + this._port;
         } else {
-            return "sd:" + this._schema + "://" + this._host + ":" + this._port;
+            return "sd:" + this._schemaCleaned + "://127.0.0.1:" + this._port;
         }
     }
 
     toString(): string {
         return "ServerConfig{" +
-            "schema='" + this._schema + '\'' +
+            "schema='" + this._schemaCleaned + '\'' +
             ", charset=" + this._charset +
             ", host='" + this._host + '\'' +
             ", port=" + this._port +
-            ", coreThreads=" + this._coreThreads +
-            ", maxThreads=" + this._maxThreads +
+            ", ioThreads=" + this._ioThreads +
+            ", codecThreads=" + this._codecThreads +
+            ", exchangeThreads=" + this._exchangeThreads +
             ", idleTimeout=" + this._idleTimeout +
-            ", replyTimeout=" + this._requestTimeout +
+            ", requestTimeout=" + this._requestTimeout +
+            ", streamTimeout=" + this._streamTimeout +
             ", readBufferSize=" + this._readBufferSize +
             ", writeBufferSize=" + this._writeBufferSize +
             ", maxUdpSize=" + this._maxUdpSize +

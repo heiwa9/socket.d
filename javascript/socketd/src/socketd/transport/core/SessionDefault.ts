@@ -4,7 +4,8 @@ import type {Handshake} from "./Handshake";
 import {Entity, EntityDefault} from "./Entity";
 import {Message, MessageBuilder} from "./Message";
 import {Frame} from "./Frame";
-import {Constants, Flags} from "./Constants";
+import {Constants} from "./Constants";
+import {Flags} from "./Flags";
 import {
     SendStreamImpl,
     RequestStream,
@@ -13,6 +14,7 @@ import {
     SubscribeStreamImpl,
     type SendStream
 } from "../stream/Stream";
+import {SocketAddress} from "./SocketAddress";
 
 /**
  * 会话默认实现
@@ -31,6 +33,18 @@ export class SessionDefault extends SessionBase {
         return this._channel.isValid();
     }
 
+    isClosing(): boolean {
+        return this._channel.isClosing();
+    }
+
+    remoteAddress(): SocketAddress | null {
+        return this._channel.getRemoteAddress();
+    }
+
+    localAddress(): SocketAddress | null {
+        return this._channel.getLocalAddress();
+    }
+
     handshake(): Handshake {
         return this._channel.getHandshake();
     }
@@ -40,7 +54,7 @@ export class SessionDefault extends SessionBase {
      *
      * @param name 名字
      */
-    param(name: string): string | undefined {
+    param(name: string): string | null {
         return this.handshake().param(name);
     }
 
@@ -98,7 +112,7 @@ export class SessionDefault extends SessionBase {
      * @return 流
      */
     send(event: string, entity: Entity): SendStream {
-        if(entity == null){
+        if (entity == null) {
             entity = new EntityDefault();
         }
 
@@ -123,7 +137,7 @@ export class SessionDefault extends SessionBase {
      * @return 流
      */
     sendAndRequest(event: string, entity: Entity, timeout?: number): RequestStream {
-        if(entity == null){
+        if (entity == null) {
             entity = new EntityDefault();
         }
 
@@ -160,7 +174,7 @@ export class SessionDefault extends SessionBase {
      * @return 流
      */
     sendAndSubscribe(event: string, entity: Entity, timeout?: number): SubscribeStream {
-        if(entity == null){
+        if (entity == null) {
             entity = new EntityDefault();
         }
 
@@ -190,7 +204,7 @@ export class SessionDefault extends SessionBase {
      * @param entity  实体
      */
     reply(from: Message, entity: Entity) {
-        if(entity == null){
+        if (entity == null) {
             entity = new EntityDefault();
         }
 
@@ -210,7 +224,7 @@ export class SessionDefault extends SessionBase {
      * @param entity  实体
      */
     replyEnd(from: Message, entity: Entity) {
-        if(entity == null){
+        if (entity == null) {
             entity = new EntityDefault();
         }
 
@@ -223,6 +237,18 @@ export class SessionDefault extends SessionBase {
         this._channel.send(new Frame(Flags.ReplyEnd, message), null);
     }
 
+    closeStarting() {
+        this.preclose();
+    }
+
+    preclose() {
+        console.debug(`${this._channel.getConfig().getRoleName()} session close starting, sessionId=${this.sessionId()}`);
+
+        if (this._channel.isValid()) {
+            this._channel.sendClose(Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING);
+        }
+    }
+
     /**
      * 关闭
      */
@@ -231,12 +257,12 @@ export class SessionDefault extends SessionBase {
 
         if (this._channel.isValid()) {
             try {
-                this._channel.sendClose();
+                this._channel.sendClose(Constants.CLOSE1001_PROTOCOL_CLOSE);
             } catch (e) {
                 console.warn(`${this._channel.getConfig().getRoleName()} channel sendClose error`, e);
             }
         }
 
-        this._channel.close(Constants.CLOSE4_USER);
+        this._channel.close(Constants.CLOSE2009_USER);
     }
 }

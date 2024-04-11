@@ -104,6 +104,11 @@ public interface Session extends ClientSession, Closeable {
     boolean isValid();
 
     /**
+     * 是否关闭中
+     * */
+    boolean isClosing();
+
+    /**
      * 获取会话Id
      */
     String sessionId();
@@ -127,7 +132,6 @@ public interface Session extends ClientSession, Closeable {
      * 发送告警
      */
     void sendAlarm(Message from, String alarm) throws IOException;
-
 
     /**
      * 答复

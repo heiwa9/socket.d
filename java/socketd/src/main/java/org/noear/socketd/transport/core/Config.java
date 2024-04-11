@@ -14,9 +14,19 @@ import java.util.concurrent.ExecutorService;
  */
 public interface Config {
     /**
-     * 是否客户端模式
+     * 是否客户模式
      */
     boolean clientMode();
+
+    /**
+     * 是否串行发送
+     */
+    boolean isSerialSend();
+
+    /**
+     * 是否无锁发送
+     */
+    boolean isNolockSend();
 
     /**
      * 获取流管理器
@@ -39,9 +49,9 @@ public interface Config {
     Codec getCodec();
 
     /**
-     * 获取Id生成器
+     * 生成Id
      */
-    IdGenerator getIdGenerator();
+    String genId();
 
     /**
      * 获取分片处理器
@@ -59,19 +69,24 @@ public interface Config {
     SSLContext getSslContext();
 
     /**
-     * 通道执行器
+     * Io线程数
      */
-    ExecutorService getChannelExecutor();
+    int getIoThreads();
 
     /**
-     * 核心线程数（第二优先）
+     * 解码线程数
      */
-    int getCoreThreads();
+    int getCodecThreads();
 
     /**
-     * 最大线程数
+     * 交换线程数
      */
-    int getMaxThreads();
+    int getExchangeThreads();
+
+    /**
+     * 交换执行器
+     */
+    ExecutorService getExchangeExecutor();
 
     /**
      * 获取读缓冲大小

@@ -29,6 +29,11 @@ public interface Channel {
     boolean isValid();
 
     /**
+     * 是否正在关闭
+     */
+    boolean isClosing();
+
+    /**
      * 是否已关闭
      */
     int isClosed();
@@ -80,10 +85,8 @@ public interface Channel {
 
     /**
      * 发送连接确认（握手）
-     *
-     * @param connectMessage 连接消息
      */
-    void sendConnack(Message connectMessage) throws IOException;
+    void sendConnack() throws IOException;
 
     /**
      * 发送 Ping（心跳）
@@ -97,8 +100,10 @@ public interface Channel {
 
     /**
      * 发送 Close
+     *
+     * @param code 关闭代码
      */
-    void sendClose() throws IOException;
+    void sendClose(int code) throws IOException;
 
     /**
      * 发送告警

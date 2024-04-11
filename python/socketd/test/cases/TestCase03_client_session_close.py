@@ -6,7 +6,7 @@ from websockets.legacy.server import WebSocketServer
 from loguru import logger
 
 from socketd.transport.core.Session import Session
-from socketd.SocketD import SocketD
+from socketd import SocketD
 from socketd.transport.server.ServerConfig import ServerConfig
 from socketd.transport.core.entity.StringEntity import StringEntity
 from socketd.transport.server.Server import Server
@@ -23,7 +23,7 @@ class TestCase03_client_session_close(BaseTestCase):
         self.loop = asyncio.get_event_loop()
 
     async def _start(self):
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).set_port(self.port))
+        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
         _simple = SimpleListenerTest()
         _server = self.server.config(config_handler).listen(_simple)
         self.server_session: WebSocketServer = await _server.start()

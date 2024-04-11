@@ -1,12 +1,14 @@
 package org.noear.socketd.broker;
 
-import org.noear.socketd.transport.core.Listener;
+import org.noear.socketd.cluster.LoadBalancer;
+import org.noear.socketd.transport.core.EntityMetas;
+import org.noear.socketd.transport.core.Message;
 import org.noear.socketd.transport.core.Session;
 import org.noear.socketd.utils.StrUtils;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 经纪人监听器基类（实现玩家封闭管理）
@@ -14,12 +16,35 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author noear
  * @since 2.1
  */
-public abstract class BrokerListenerBase implements Listener {
+public abstract class BrokerListenerBase {
+    private Map<String, Session> sessionAll = new ConcurrentHashMap<>();
     //玩家会话
     private Map<String, Set<Session>> playerSessions = new ConcurrentHashMap<>();
-    //轮询计数
-    private AtomicInteger playerRoundCounter = new AtomicInteger(0);
 
+    /**
+     * 获取所有会话（包括没有名字的）
+     */
+    public Collection<Session> getSessionAll() {
+        return sessionAll.values();
+    }
+
+    /**
+     * 获取任意会话（包括没有名字的）
+     */
+    public Session getSessionAny(){
+        return LoadBalancer.getAnyByPoll(sessionAll.values());
+    }
+
+    /**
+     * 获取会话数量
+     * */
+    public int getSessionCount(){
+        return sessionAll.size();
+    }
+
+    /**
+     * 获取所有玩家的名字
+     */
     public Collection<String> getNameAll() {
         return playerSessions.keySet();
     }
@@ -29,7 +54,7 @@ public abstract class BrokerListenerBase implements Listener {
      *
      * @param name 名字
      */
-    public int getPlayerNum(String name) {
+    public int getPlayerCount(String name) {
         Collection<Session> tmp = getPlayerAll(name);
 
         if (tmp == null) {
@@ -37,6 +62,17 @@ public abstract class BrokerListenerBase implements Listener {
         } else {
             return tmp.size();
         }
+    }
+
+    /**
+     * 获取所有玩家数量
+     *
+     * @param name 名字
+     * @deprecated 2.4
+     */
+    @Deprecated
+    public int getPlayerNum(String name) {
+        return getPlayerCount(name);
     }
 
     /**
@@ -49,48 +85,67 @@ public abstract class BrokerListenerBase implements Listener {
     }
 
     /**
-     * 获取一个玩家会话
+     * 获取任意一个玩家会话
      *
-     * @param name 名字
+     * @param atName 目标名字
+     * @since 2.3
      */
-    public Session getPlayerOne(String name) {
-        if (StrUtils.isEmpty(name)) {
+    public Session getPlayerAny(String atName, Session requester, Message message) throws IOException {
+        if (StrUtils.isEmpty(atName)) {
             return null;
         }
 
-        Session session = getPlayerOneDo(name);
+        if (atName.endsWith("!")) {
+            atName = atName.substring(0, atName.length() - 1);
+            String x_hash = null;
 
-        if (session != null) {
-            if (session.isValid() == false) {
-                //如果无效，做关闭处理 //只试一次（避免性能浪费）
-                onClose(session);
-                session = getPlayerOneDo(name);
+            if(message != null){
+                x_hash = message.meta(EntityMetas.META_X_Hash);
             }
-        }
 
-        return session;
+            if (StrUtils.isEmpty(x_hash)) {
+                if (requester == null) {
+                    return LoadBalancer.getAnyByPoll(getPlayerAll(atName));
+                } else {
+                    //使用请求者 ip 分流
+                    return LoadBalancer.getAnyByHash(getPlayerAll(atName), requester.remoteAddress().getHostName());
+                }
+            } else {
+                //使用指定 hash 分流
+                return LoadBalancer.getAnyByHash(getPlayerAll(atName), x_hash);
+            }
+        } else {
+            return LoadBalancer.getAnyByPoll(getPlayerAll(atName));
+        }
     }
 
-    private Session getPlayerOneDo(String name) {
-        Collection<Session> tmp = getPlayerAll(name);
-        if (tmp == null || tmp.size() == 0) {
+    /**
+     * 获取任意一个玩家会话（不支持哈希）
+     *
+     * @param atName 目标名字
+     * @since 2.3
+     */
+    public Session getPlayerAny(String atName) {
+        if (StrUtils.isEmpty(atName)) {
             return null;
         }
 
-        //线程安全处理（避免别处有增减）
-        List<Session> sessions = new ArrayList<>(tmp);
-
-        if (sessions.size() == 1) {
-            return sessions.get(0);
-        } else {
-            //论询处理
-            int counter = playerRoundCounter.incrementAndGet();
-            int idx = counter % sessions.size();
-            if (counter > 999_999_999) {
-                playerRoundCounter.set(0);
-            }
-            return sessions.get(idx);
+        if (atName.endsWith("!")) {
+            atName = atName.substring(0, atName.length() - 1);
         }
+
+        return LoadBalancer.getAnyByPoll(getPlayerAll(atName));
+    }
+
+    /**
+     * 获取任意一个玩家会话
+     *
+     * @param atName 目标名字
+     * @deprecated  2.3
+     */
+    @Deprecated
+    public Session getPlayerOne(String atName){
+        return getPlayerAny(atName);
     }
 
     /**
@@ -105,6 +160,8 @@ public abstract class BrokerListenerBase implements Listener {
             Set<Session> sessions = playerSessions.computeIfAbsent(name, n -> Collections.newSetFromMap(new ConcurrentHashMap<>()));
             sessions.add(session);
         }
+
+        sessionAll.put(session.sessionId(), session);
     }
 
     /**
@@ -121,5 +178,7 @@ public abstract class BrokerListenerBase implements Listener {
                 sessions.remove(session);
             }
         }
+
+        sessionAll.remove(session.sessionId());
     }
 }

@@ -1,9 +1,6 @@
 package org.noear.socketd.transport.core.impl;
 
-import org.noear.socketd.transport.core.Channel;
-import org.noear.socketd.transport.core.Config;
-import org.noear.socketd.transport.core.HandshakeInternal;
-import org.noear.socketd.transport.core.Message;
+import org.noear.socketd.transport.core.*;
 
 import java.io.IOException;
 import java.util.Map;
@@ -18,11 +15,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public abstract class ChannelBase implements Channel {
     //最大请求数（根据请求、响应加减计数）
     private final Config config;
-
+    //附件
     private final Map<String, Object> attachments = new ConcurrentHashMap<>();
+    //握手信息
     private HandshakeInternal handshake;
-    //是否已关闭（用于做关闭异常提醒）//可能协议关；可能用户关
-    private int isClosed;
 
 
     public ChannelBase(Config config) {
@@ -49,21 +45,11 @@ public abstract class ChannelBase implements Channel {
         }
     }
 
-
-    @Override
-    public int isClosed() {
-        return isClosed;
-    }
-
-    @Override
-    public void close(int code) {
-        isClosed = code;
-        attachments.clear();
-    }
-
     @Override
     public void setHandshake(HandshakeInternal handshake) {
-        this.handshake = handshake;
+        if(handshake != null) {
+            this.handshake = handshake;
+        }
     }
 
 
@@ -74,12 +60,12 @@ public abstract class ChannelBase implements Channel {
 
     @Override
     public void sendConnect(String uri, Map<String, String> metaMap) throws IOException {
-        send(Frames.connectFrame(getConfig().getIdGenerator().generate(), uri, metaMap), null);
+        send(Frames.connectFrame(getConfig().genId(), uri, metaMap), null);
     }
 
     @Override
-    public void sendConnack(Message connectMessage) throws IOException {
-        send(Frames.connackFrame(connectMessage), null);
+    public void sendConnack() throws IOException {
+        send(Frames.connackFrame(getHandshake()), null);
     }
 
     @Override
@@ -93,12 +79,20 @@ public abstract class ChannelBase implements Channel {
     }
 
     @Override
-    public void sendClose() throws IOException {
-        send(Frames.closeFrame(), null);
+    public void sendClose(int code) throws IOException {
+        send(Frames.closeFrame(code), null);
     }
 
     @Override
     public void sendAlarm(Message from, String alarm) throws IOException {
         send(Frames.alarmFrame(from, alarm), null);
+    }
+
+
+    @Override
+    public void close(int code) {
+        if (code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+            attachments.clear();
+        }
     }
 }

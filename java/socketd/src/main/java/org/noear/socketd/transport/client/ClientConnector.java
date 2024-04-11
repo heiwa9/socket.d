@@ -1,7 +1,6 @@
 package org.noear.socketd.transport.client;
 
 import org.noear.socketd.transport.core.ChannelInternal;
-import org.noear.socketd.transport.core.HeartbeatHandler;
 
 import java.io.IOException;
 
@@ -13,17 +12,12 @@ import java.io.IOException;
  */
 public interface ClientConnector {
     /**
-     * 获取心跳处理
-     */
-    HeartbeatHandler getHeartbeatHandler();
+     * 获取配置
+     * */
+    ClientConfig getConfig();
 
     /**
-     * 获取心跳频率（单位：毫秒）
-     */
-    long getHeartbeatInterval();
-
-    /**
-     * 是否自动重连
+     * 是否支持自动重连
      */
     boolean autoReconnect();
 
@@ -37,5 +31,5 @@ public interface ClientConnector {
     /**
      * 关闭
      */
-    void close();
+    void close() throws IOException;
 }

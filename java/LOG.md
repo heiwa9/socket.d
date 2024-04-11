@@ -1,3 +1,97 @@
+### 2.4.10
+* 添加 preclose 和 prestop（简化二段式停止操作）
+* 调整 通道关闭打印条件（避免多次打印）
+
+### 2.4.9
+* 添加 CLOSE2003_DISCONNECTION 关闭码
+* 添加 Pressure 帧类型（预留做背压控制）
+* 修复 当使用二段式关闭时，可能出现无法重连的问题（2.3.10 后出现的）
+
+### 2.4.8
+* 添加 X-Hash 元信息支持
+* smartsocket 升为 1.5.43
+
+### 2.4.7
+* 调整 读写缓冲大小配置默认 512 改为 4k（主要用在 bio 跟 aio 上）
+* 调整 smartsocket 附件的处理（简化）
+* 调整 client:open 改为无异常模式
+* 调整 Config::isSequenceSend 更名为 isSerialSend
+* 调整 Config::getIdGenerator 改为 genId
+* 调整 HandshakeDefault path 为空时，默认为 /
+* 调整 把发送锁改为配置决定的固定模式
+* 简化 心跳异常日志
+
+### 2.4.6
+* 添加 spi 手动注册方式
+
+### 2.4.5
+* 优化 流异常传导性
+* 添加 Entity:delMeta 删除元信息接口
+
+### 2.4.4
+* 添加 BrokerListener 异常转发支持
+
+### 2.4.3
+* 优化 EntityDefault:metaPut 当 val=null时，视为删除
+* 优化 ClientChannel:heartbeatHandle 添加 isClosing 的判断
+* 优化 ClientChannel:heartbeatHandle 处理，增加内部会话关闭时，同步到外层
+* 优化 ChannelDefault 内部的通道关闭改为延时100ms关，避免 sendClose 时通道坏掉
+* 调整 BrokerListener 的能力方法，都改为公有
+* 调整 心跳日志级别改为 debug
+* 添加 BrokerListenerBase:getPlayerAny(name) 接口
+* smart-socket 升为 1.5.42
+
+### 2.4.2
+* 添加 连接时 Handshake 元信息交互机制
+
+### 2.4.1
+* 添加 ClientConnectHandler 接口，提供连接时的拦截处理
+
+### 2.4.0
+
+* 添加 LoadBalancer 集群负载均衡工具
+* 添加 BrokerListener 新的转发路由机制，固定给某个接收者（name!）
+* 调整 Socketd 开头的异常类改为 SocketD 开头（与 python 统一）
+* 调整 几个配置名
+
+
+| 接配置名         | 新配置名            | 备注                       |
+|--------------|-----------------|--------------------------|
+| maxThreads   | exchangeThreads | 交换线程数，用于消息接收等（原来的名字，语义不明） |
+| coreThreads  | codecThreads    | 解码线程数，用于编解码等（原来的名字，语义不明）  |
+| /            | ioThreads       | Io线程数，用于连接等               |
+| sequenceMode | sequenceSend    | 有锁顺序发送（原来的名字，语义不明）                   |
+| /            | nolockSend      | 无锁发送                     |
+
+备注：关于线程配置，在不同的适配时使用情况不同。其中 exchange 支持直接配置线程池（以支持 jdk21 的虚拟线程池）
+
+### 2.3.11
+* 优化 安全停止细节
+
+### 2.3.10
+* 添加 Session::closeStarting 接口（为安全退出集群提供机制）
+* 添加 关闭协议帧对 code 的支持（为安全退出集群提供机制）
+* 修复 MappedByteBuffer 不能解除映射的问题（可以改善内存与删除控制）
+* 修复 Entity.of(String) 会出错的问题
+* 修复 使用临时文件分片处理失效的问题
+* 调整 轮询最大值改为 999_999
+* 调整 消息发送锁的策略改为可配置（根据 sequenceMode 使用公平锁或非公平锁）
+* 调整 smartsocket,websocket,netty 适配的服务端线程数改由配置决定
+
+### 2.3.9
+* 调整 ReentrantLock 替代 synchronized
+
+### 2.3.8
+* 添加 CLOSE28_OPEN_FAIL 关闭码，优化关闭处理
+* 调整 SocketD.createXxx 的异常提示，带上协议架构信息
+* 调整 PathListener::of 更名为 doOf，并添加 of 函数（应用不同）
+
+
+### 2.3.7
+* 添加 Client::openOrThow() 方法，原 open() 不再出异常
+* 调整 ClientChannel 内部处理，支持首次连接失败后仍可用
+* 简化 ClientBase::open() 处理
+
 ### 2.3.6
 * 添加 Session::liveTime 接口
 * 添加 Entity.of 快捷方法
@@ -6,7 +100,7 @@
 * 添加 连接协议对 meta 传递的支持
 * 添加 Handshake:path 方法
 * 添加 CodecReader::peekByte 方法
-* 调啵 发送时允许实体为 null（总有不需要传的时候）
+* 调整 发送时允许实体为 null（总有不需要传的时候）
 * 优化 Codec::decodeString 处理方式
 
 ### 2.3.4

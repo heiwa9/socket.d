@@ -4,6 +4,7 @@ import type {WsClient} from "./WsClient";
 import {
     SdWebSocket,
     SdWebSocketCloseEvent,
+    SdWebSocketErrorEvent,
     SdWebSocketEvent,
     SdWebSocketListener,
     SdWebSocketMessageEvent
@@ -12,8 +13,8 @@ import type {IoConsumer} from "../transport/core/Typealias";
 import {ClientHandshakeResult} from "../transport/client/ClientHandshakeResult";
 import {EnvBridge} from "./impl/EnvBridge";
 import {ChannelDefault} from "../transport/core/ChannelDefault";
-import {Flags} from "../transport/core/Constants";
-import {SocketdConnectionException} from "../exception/SocketdException";
+import {Flags} from "../transport/core/Flags";
+import {SocketDConnectionException} from "../exception/SocketDException";
 
 export class WsClientConnector extends ClientConnectorBase<WsClient> {
     _real: WebSocketClientImpl;
@@ -31,13 +32,17 @@ export class WsClientConnector extends ClientConnectorBase<WsClient> {
 
 
         return new Promise<ChannelInternal>((resolve, reject) => {
-            this._real = new WebSocketClientImpl(url, this._client, (r) => {
-                if (r.getThrowable()) {
-                    reject(r.getThrowable());
-                } else {
-                    resolve(r.getChannel());
-                }
-            });
+            try {
+                this._real = new WebSocketClientImpl(url, this._client, (r) => {
+                    if (r.getThrowable()) {
+                        reject(r.getThrowable());
+                    } else {
+                        resolve(r.getChannel()!);
+                    }
+                });
+            } catch (err) {
+                reject(err);
+            }
         })
     }
 
@@ -51,13 +56,18 @@ export class WsClientConnector extends ClientConnectorBase<WsClient> {
 
 
 export class WebSocketClientImpl implements SdWebSocketListener {
-    _real: SdWebSocket;
-    _client: WsClient;
-    _channel: ChannelInternal;
-    _handshakeFuture: IoConsumer<ClientHandshakeResult>;
+    private _real: SdWebSocket;
+    private _client: WsClient;
+    private _channel: ChannelInternal;
+    private _handshakeFuture: IoConsumer<ClientHandshakeResult> | null;
 
     constructor(url: string, client: WsClient, handshakeFuture: IoConsumer<ClientHandshakeResult>) {
-        this._real = EnvBridge.createSdWebSocketClient(url, this);
+        try {
+            this._real = EnvBridge.createSdWebSocketClient(url, this);
+        } catch (err) {
+            //首次连接有可能会失败
+            handshakeFuture(new ClientHandshakeResult(null, err));
+        }
         this._client = client;
         this._channel = new ChannelDefault(this._real, client);
         this._handshakeFuture = handshakeFuture;
@@ -81,19 +91,15 @@ export class WebSocketClientImpl implements SdWebSocketListener {
                 if (frame != null) {
                     if (frame.flag() == Flags.Connack) {
                         this._channel.onOpenFuture((r, err) => {
-                            if (err == null) {
-                                this._handshakeFuture(new ClientHandshakeResult(this._channel, null));
-                            } else {
-                                this._handshakeFuture(new ClientHandshakeResult(this._channel, err));
-                            }
+                            this.handshakeFutureDo(err);
                         });
                     }
 
                     this._client.getProcessor().onReceive(this._channel, frame);
                 }
             } catch (e) {
-                if (e instanceof SocketdConnectionException) {
-                    this._handshakeFuture(new ClientHandshakeResult(this._channel, e));
+                if (e instanceof SocketDConnectionException) {
+                    this.handshakeFutureDo(e);
                 }
 
 
@@ -106,8 +112,17 @@ export class WebSocketClientImpl implements SdWebSocketListener {
         this._client.getProcessor().onClose(this._channel);
     }
 
-    onError(e) {
-        this._client.getProcessor().onError(this._channel, e);
+    onError(e: SdWebSocketErrorEvent) {
+        this.handshakeFutureDo(e.error());
+        this._client.getProcessor().onError(this._channel, e.error());
+    }
+
+    private handshakeFutureDo(e) {
+        if (this._handshakeFuture) {
+            this._handshakeFuture(new ClientHandshakeResult(this._channel, e));
+        } else {
+            this._handshakeFuture = null;
+        }
     }
 
 

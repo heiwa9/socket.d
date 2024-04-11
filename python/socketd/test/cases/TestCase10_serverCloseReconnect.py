@@ -15,7 +15,7 @@ from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
 from test.modelu.BaseTestCase import BaseTestCase
 
 from socketd.transport.core.Session import Session
-from socketd.SocketD import SocketD
+from socketd import SocketD
 from socketd.transport.server.ServerConfig import ServerConfig
 from socketd.transport.server.Server import Server
 from test.modelu.SimpleListenerTest import config_handler
@@ -62,7 +62,7 @@ class TestCase10_serverCloseReconnect(BaseTestCase):
         self._simple = SimpleListenerTest()
 
     async def _start(self):
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).set_port(self.port))
+        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
         _server = self.server.config(config_handler).listen(self._simple)
         self.server_session: WebSocketServer = await _server.start()
 

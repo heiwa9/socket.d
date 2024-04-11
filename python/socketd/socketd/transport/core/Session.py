@@ -1,71 +1,71 @@
 import abc
-from typing import Union, Dict, Any, Callable, Awaitable, Coroutine, Optional
-from asyncio import Future
+from typing import Union, Dict, Any, Callable, Coroutine, Optional
 
 from socket import gethostbyaddr
+
+from socketd.transport.client.ClientSession import ClientSession
 from socketd.transport.core import HandshakeDefault
 from socketd.transport.core.Message import Message
 from socketd.transport.core.Entity import Entity
-from socketd.transport.core.stream.RequestStream import RequestStream
-from socketd.transport.core.stream.SendStream import SendStream
-from socketd.transport.core.stream.SubscribeStream import SubscribeStream
 
 
-class Session(abc.ABC):
+class Session(ClientSession):
+
     @abc.abstractmethod
-    def is_valid(self) -> bool:
+    def remote_address(self) -> gethostbyaddr:
         ...
 
     @abc.abstractmethod
-    def get_remote_address(self) -> gethostbyaddr:
+    def local_address(self) -> gethostbyaddr:
         ...
 
     @abc.abstractmethod
-    def get_local_address(self) -> gethostbyaddr:
+    def handshake(self) -> HandshakeDefault:
+        ...
+
+    def name(self):
+        self.param("@")
+
+    @abc.abstractmethod
+    def param(self, name: str) -> str:
         ...
 
     @abc.abstractmethod
-    def get_handshake(self) -> HandshakeDefault:
+    def param_or_default(self, name: str, defVal: str) -> str:
         ...
 
     @abc.abstractmethod
-    def get_param(self, name: str): ...
+    def path(self) -> Optional[str]: ...
 
     @abc.abstractmethod
-    def get_attr_map(self) -> Dict[str, Any]:
+    def path_new(self, pathNew: str): ...
+
+    @abc.abstractmethod
+    def attr_map(self) -> Dict[str, Any]:
         ...
 
     @abc.abstractmethod
-    def get_attr(self, name: str) -> Union[None, Any]:
+    def attr_has(self, name: str) -> bool:
         ...
 
     @abc.abstractmethod
-    def get_attr_or_default(self, name: str, default: Any) -> Any:
+    def attr(self, name: str) -> Union[None, Any]:
         ...
 
     @abc.abstractmethod
-    def set_attr(self, name: str, value: Any) -> None:
+    def attr_or_default(self, name: str, defVal: Any) -> Any:
         ...
 
     @abc.abstractmethod
-    def get_session_id(self) -> str:
+    def attr_put(self, name: str, value: Any) -> None:
         ...
 
     @abc.abstractmethod
-    def send_ping(self) -> Callable | Coroutine:
+    async def send_ping(self) -> Callable | Coroutine:
         ...
 
     @abc.abstractmethod
-    async def send(self, event: str, content: Entity) -> SendStream:
-        ...
-
-    @abc.abstractmethod
-    async def send_and_request(self, event: str, content: Entity, timeout: int) -> RequestStream:
-        ...
-
-    @abc.abstractmethod
-    async def send_and_subscribe(self, event: str, content: Entity,
-                                 timeout: int = 0) -> SubscribeStream:
+    async def send_alarm(self, _from: Message, alarm: str) -> None:
         ...
 
     @abc.abstractmethod
@@ -77,22 +77,9 @@ class Session(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def close(self):
+    def live_time(self):
         ...
 
     @abc.abstractmethod
     def generate_id(self) -> str:
         ...
-
-    @abc.abstractmethod
-    def set_session_id(self, value):
-        ...
-
-    @abc.abstractmethod
-    def reconnect(self) -> Future | None: ...
-
-    @abc.abstractmethod
-    def path(self) -> Optional[str]: ...
-
-    @abc.abstractmethod
-    def pathNew(self, path: str): ...

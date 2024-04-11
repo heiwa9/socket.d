@@ -1,5 +1,5 @@
 import type {Listener} from "../core/Listener";
-import type {IoConsumer} from "../core/Typealias";
+import type {IoConsumer, IoFunction} from "../core/Typealias";
 import type {ClientSession} from "./ClientSession";
 import type {ClientConfig} from "./ClientConfig";
 import {Processor, ProcessorDefault} from "../core/Processor";
@@ -7,7 +7,8 @@ import type {ChannelAssistant} from "../core/ChannelAssistant";
 import type {Session} from "../core/Session";
 import type {ClientConnector} from "./ClientConnector";
 import {ClientChannel} from "./ClientChannel";
-import {SessionDefault} from "../core/SessionDefault";
+import {Constants} from "../core/Constants";
+import {ChannelInternal} from "../core/Channel";
 
 /**
  * 客户端（用于构建会话）
@@ -17,12 +18,17 @@ import {SessionDefault} from "../core/SessionDefault";
  */
 export interface Client {
     /**
-     * 心跳
+     * 连接处理
+     */
+    connectHandler(handler: IoFunction<ClientConnector, Promise<ChannelInternal>>);
+
+    /**
+     * 心跳处理
      */
     heartbeatHandler(handler: IoConsumer<Session>)
 
     /**
-     * 配置
+     * 配置处理
      */
     config(configHandler: IoConsumer<ClientConfig>)
 
@@ -35,6 +41,11 @@ export interface Client {
      * 打开会话
      */
     open(): Promise<ClientSession>;
+
+    /**
+     * 打开会话或出异常（即要求第一次是连接成功的）
+     */
+    openOrThow(): Promise<ClientSession>;
 }
 
 
@@ -45,6 +56,11 @@ export interface Client {
  * @since  2.1
  */
 export interface ClientInternal extends Client {
+    /**
+     * 获取连接处理器
+     */
+    getConnectHandler(): IoFunction<ClientConnector, Promise<ChannelInternal>>;
+
     /**
      * 获取心跳处理
      */
@@ -74,6 +90,7 @@ export interface ClientInternal extends Client {
  */
 export abstract class ClientBase<T extends ChannelAssistant<Object>> implements ClientInternal {
     private _config: ClientConfig;
+    private _connectHandler : IoFunction<ClientConnector, Promise<ChannelInternal>>;
     private _heartbeatHandler: IoConsumer<Session>;
     private _processor: Processor;
     private _assistant: T;
@@ -89,6 +106,10 @@ export abstract class ClientBase<T extends ChannelAssistant<Object>> implements 
      */
     getAssistant(): T {
         return this._assistant;
+    }
+
+    getConnectHandler(): IoFunction<ClientConnector, Promise<ChannelInternal>> {
+        return this._connectHandler;
     }
 
     /**
@@ -120,7 +141,18 @@ export abstract class ClientBase<T extends ChannelAssistant<Object>> implements 
     }
 
     /**
-     * 设置心跳
+     * 设置连接处理器
+     */
+    connectHandler(handler: IoFunction<ClientConnector, Promise<ChannelInternal>>) {
+        if (handler != null) {
+            this._connectHandler = handler;
+        }
+
+        return this;
+    }
+
+    /**
+     * 设置心跳处理器
      */
     heartbeatHandler(handler: IoConsumer<Session>) {
         if (handler != null) {
@@ -152,26 +184,37 @@ export abstract class ClientBase<T extends ChannelAssistant<Object>> implements 
         return this;
     }
 
+
+    open(): Promise<ClientSession> {
+        return this.openDo(false);
+    }
+
     /**
      * 打开会话
      */
-    async open(): Promise<ClientSession> {
+    openOrThow(): Promise<ClientSession> {
+        return this.openDo(true);
+    }
+
+    private openDo(isThow: boolean): Promise<ClientSession> {
         const connector = this.createConnector();
+        const clientChannel = new ClientChannel(this, connector);
 
-        //连接
-        const channel0 = await connector.connect();
-        //新建客户端通道
-        const clientChannel = new ClientChannel(channel0, connector);
-        //同步握手信息
-        clientChannel.setHandshake(channel0.getHandshake());
-        const session = new SessionDefault(clientChannel);
-        //原始通道切换为带壳的 session
-        channel0.setSession(session);
-
-        //console.info(`Socket.D client successfully connected: {link=${this.getConfig().getLinkUrl()}`);
-        console.info(`Socket.D client successfully connected!`);
-
-        return session;
+        return new Promise<ClientSession>((resolve, reject) => {
+            // @ts-ignore
+            clientChannel.connect().then(res => {
+                console.info("Socket.D client successfully connected!");
+                resolve(clientChannel.getSession());
+            }, err => {
+                if (isThow) {
+                    clientChannel.close(Constants.CLOSE2008_OPEN_FAIL);
+                    reject(err);
+                } else {
+                    console.warn("Socket.D client Connection failed!");
+                    resolve(clientChannel.getSession());
+                }
+            })
+        });
     }
 
     /**

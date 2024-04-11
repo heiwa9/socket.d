@@ -1,0 +1,9 @@
+server.http.ioBound: false
+
+solon.logging.appender:
+  console:
+    level: "TRACE"
+
+solon.logging.logger:
+  "root":
+    level: "INFO"
