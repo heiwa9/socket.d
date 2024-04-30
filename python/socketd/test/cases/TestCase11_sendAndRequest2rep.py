@@ -1,15 +1,13 @@
 import asyncio
-import uuid
 
 from threading import current_thread
 from socketd import SocketD
 from socketd.transport.client.ClientConfig import ClientConfig
+from socketd.transport.core.Entity import Reply
 from socketd.transport.core.Message import Message
 from socketd.transport.stream.RequestStream import RequestStream
-from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
+from socketd.utils.sync_api.AtomicRefer import AtomicRefer
 from test.modelu.BaseTestCase import BaseTestCase
-
-from websockets.legacy.server import WebSocketServer
 
 from socketd.transport.core.Session import Session
 from socketd.transport.server.ServerConfig import ServerConfig
@@ -41,10 +39,10 @@ class SimpleListenerTest(Listener):
             self.server_counter.set(self.server_counter.get() + 1)
         logger.info(f"server::{message.data_as_string()} :: {message}")
         if message.is_request():
-            req: RequestStream = await session.send_and_request("demo", StringEntity("今天不好"), 100)
+            req: RequestStream = session.send_and_request("demo", StringEntity("今天不好"), 100)
             # todo await_result会进行强阻塞线程，导致无法监听到其他线程修改的值，线程可见性，这里就停止0.1等待
             logger.debug(f"开始等待::s::{current_thread().name} eventLoop: {id(asyncio.get_running_loop())}")
-            entity = await req.await_result()
+            entity:Reply = await req.waiter()
             logger.debug(f"等待结束::s::{current_thread().name} eventLoop: {id(asyncio.get_running_loop())}")
             await session.reply_end(message, entity)
             logger.info(f"server::res::: {entity}")
@@ -89,15 +87,14 @@ class TestCase11_sendAndRequest2rep(BaseTestCase):
         super().__init__(schema, port)
         self.server: Server = None
         self.client = None
-        self.server_session: WebSocketServer = None
         self.client_session: Session = None
         self.loop = asyncio.get_event_loop()
 
     async def _start(self):
         s = SimpleListenerTest()
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
-        self.server_session: WebSocketServer = await self.server.config(config_handler).listen(
-            s).start()
+        self.server: Server = await (SocketD.create_server(ServerConfig(self.schema).port(self.port))
+                               .config(config_handler).listen(s)
+                               .start())
 
         serverUrl = self.schema + "://127.0.0.1:" + str(self.port) + "/path?u=a&p=2"
         self.client = SocketD.create_client(serverUrl) \
@@ -105,9 +102,9 @@ class TestCase11_sendAndRequest2rep(BaseTestCase):
             .config(config_handler)
         self.client_session: Session = await self.client.open()
         # await asyncio.sleep(1)
-        req: RequestStream = await self.client_session.send_and_request("demo", StringEntity("你好"), 100)
+        req: RequestStream = self.client_session.send_and_request("demo", StringEntity("你好"), 100)
         logger.debug(f"开始等待 main {current_thread().name} eventLoop: {id(asyncio.get_running_loop())}")
-        entity = await req.await_result()
+        entity = await req.waiter()
         logger.debug(f"等待结束 main {current_thread().name} eventLoop: {id(asyncio.get_running_loop())}")
         logger.info(f"c: res{entity} {entity.data_as_string()}")
         await asyncio.sleep(1)
@@ -120,8 +117,7 @@ class TestCase11_sendAndRequest2rep(BaseTestCase):
     async def _stop(self):
         if self.client_session:
             await self.client_session.close()
-        if self.server_session:
-            self.server_session.close()
+
         if self.server:
             await self.server.stop()
 

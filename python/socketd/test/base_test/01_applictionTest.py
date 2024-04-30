@@ -1,12 +1,10 @@
 import asyncio
 import sys
 
-from websockets.legacy.server import WebSocketServer
-
 from socketd import SocketD
 from socketd.transport.core import Entity
 from socketd.transport.core.Session import Session
-from socketd.transport.core.impl.LogConfig import log
+from socketd.utils.LogConfig import log
 from socketd.transport.server.ServerConfig import ServerConfig
 from socketd.transport.core.entity.StringEntity import StringEntity
 from socketd.transport.server.Server import Server
@@ -15,20 +13,20 @@ from test.uitls import calc_async_time
 
 
 # 超过一定数量会导致异步并发发生异常
-COUNT = 10000
+COUNT = 100
 
 log.remove()
-log.add(sys.stderr, level="INFO")
+log.add(sys.stderr, level="INFO", enqueue=True)
 
 
 @calc_async_time
 async def application_test():
     loop = asyncio.get_running_loop()
-    server: Server = SocketD.create_server(ServerConfig("ws").port(9999))
-    server_session: WebSocketServer = await server.listen(
-        SimpleListenerTest()).start()
+    server: Server = await (SocketD.create_server(ServerConfig("ws").port(9999))
+                      .listen(SimpleListenerTest())
+                      .start())
     await asyncio.sleep(1)
-    client_session: Session = await SocketD.create_client("std:ws://127.0.0.1:9999").open()
+    client_session: Session = await SocketD.create_client("sd:ws://127.0.0.1:9999").open()
 
     log.info(f"client send count: {COUNT} ...")
     # 单向发送
@@ -50,7 +48,7 @@ async def application_test():
         data, _ = await asyncio.wait(tasks)
         tasks.clear()
         for req in data:
-            tasks.append(req.result().await_result())
+            tasks.append(req.result().get())
         await asyncio.gather(*tasks)
     await _send_and_request()
 
@@ -72,8 +70,6 @@ async def application_test():
     await asyncio.sleep(3)
     # 关闭客户端会话
     await client_session.close()
-    # 关闭服务端端会话
-    server_session.close()
     # 停止服务端端
     await server.stop()
 

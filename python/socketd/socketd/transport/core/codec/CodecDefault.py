@@ -32,16 +32,15 @@ class CodecDefault(Codec):
             # sid
             sidB: bytes = frame.message().sid().encode(self.config.get_charset())
             # event
-            event: bytes = frame.message().event().encode(self.config.get_charset())
+            eventB: bytes = frame.message().event().encode(self.config.get_charset())
             # metaString
             metaStringB: bytes = frame.message().entity().meta_string().encode(self.config.get_charset())
 
-            # length (flag + sid + event + metaString + data + int.bytes + \n*3)
-            len1 = len(sidB) + len(event) + len(
-                metaStringB) + frame.message().entity().data_size() + 1 * 3 + 2 * 4
+            # length (len[int] + flag[int] + sid + event + metaString + data + \n*3)
+            len1 = 4 + 4 + len(sidB) + len(eventB) + len(metaStringB) + frame.message().data_size() + 2 * 3
 
             Asserts.assert_size("sid", len(sidB), Constants.MAX_SIZE_SID)
-            Asserts.assert_size("event", len(event), Constants.MAX_SIZE_EVENT)
+            Asserts.assert_size("event", len(eventB), Constants.MAX_SIZE_EVENT)
             Asserts.assert_size("metaString", len(metaStringB), Constants.MAX_SIZE_META_STRING)
             Asserts.assert_size("data", frame.message().entity().data_size(), Constants.MAX_SIZE_DATA)
 
@@ -55,15 +54,15 @@ class CodecDefault(Codec):
 
             # sid
             target.put_bytes(sidB)
-            target.put_bytes(b'\n')
+            target.put_char(10) #'\n'
 
             # event
-            target.put_bytes(event)
-            target.put_bytes(b'\n')
+            target.put_bytes(eventB)
+            target.put_char(10)
 
             # metaString
             target.put_bytes(metaStringB)
-            target.put_bytes(b'\n')
+            target.put_char(10)
 
             # _data
             if frame.message().entity().data() is not None:
@@ -73,25 +72,30 @@ class CodecDefault(Codec):
             return target
 
     def read(self, _reader: CodecReader) -> Frame | None:
-        len0 = _reader.get_int()
+        frameSize = _reader.get_int()
 
-        if len0 > (_reader.remaining() + 4):
+        if frameSize > (_reader.remaining() + 4):
             return None
 
         flag = _reader.get_int()  # 取前一位数据
 
-        if len0 == 8:
+        if frameSize == 8:
             # len + flag
             return Frame(Flags.of(flag), None)
         else:
             metaBufSize = min(Constants.MAX_SIZE_META_STRING, _reader.remaining())
+
             # 1. decode sid and event
-            by = Buffer(limit=metaBufSize)
-            sid = self.decodeString(_reader, by, Constants.MAX_SIZE_SID)
-            event = self.decodeString(_reader, by, Constants.MAX_SIZE_EVENT)
-            metaString = self.decodeString(_reader, by, Constants.MAX_SIZE_META_STRING)
+            buf = Buffer(limit=metaBufSize)
+
+            sid = self.decodeString(_reader, buf, Constants.MAX_SIZE_SID)
+
+            event = self.decodeString(_reader, buf, Constants.MAX_SIZE_EVENT)
+
+            metaString = self.decodeString(_reader, buf, Constants.MAX_SIZE_META_STRING)
+
             # 2. decode body
-            dataRealSize = len0 - _reader.position()
+            dataRealSize = frameSize - _reader.position()
             data: Optional[bytearray] = None
             if dataRealSize > Constants.MAX_SIZE_DATA:
                 # exceeded the limit, read and discard the bytes
@@ -102,15 +106,18 @@ class CodecDefault(Codec):
             else:
                 data = bytearray(_reader.get_buffer().read(dataRealSize))
 
-            message = MessageBuilder().flag(Flags.of(flag)).sid(sid).event(event).entity(
-                EntityDefault().meta_string_set(metaString).data_set(data)
-            ).build()
-            by.close()
+            message = (MessageBuilder()
+                       .flag(Flags.of(flag))
+                       .sid(sid)
+                       .event(event)
+                       .entity(EntityDefault().data_set(data).meta_string_set(metaString))
+                       .build())
+            buf.close()
             _reader.close()
             return Frame(message.flag(), message)
 
     def decodeString(self, reader: CodecReader, buf: Buffer, maxLen: int) -> str:
-        b = bytearray(reader.get_buffer().readline(maxLen).replace(b'\n', b''))
+        b = bytearray(reader.get_buffer().readline(maxLen).replace(b'\x00\n', b''))
         if buf.limit() < 1:
             return ""
         return b.decode(self.config.get_charset())

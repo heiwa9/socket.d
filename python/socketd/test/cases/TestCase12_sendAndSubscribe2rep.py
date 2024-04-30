@@ -1,14 +1,11 @@
 import asyncio
-import uuid
 
 from socketd import SocketD
 from socketd.transport.client.ClientConfig import ClientConfig
 from socketd.transport.core.Message import Message
 from socketd.transport.stream import SubscribeStream
-from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
+from socketd.utils.sync_api.AtomicRefer import AtomicRefer
 from test.modelu.BaseTestCase import BaseTestCase
-
-from websockets.legacy.server import WebSocketServer
 
 from socketd.transport.core.Session import Session
 from socketd.transport.server.ServerConfig import ServerConfig
@@ -85,15 +82,14 @@ class TestCase12_sendAndSubscribe2rep(BaseTestCase):
     def __init__(self, schema, port):
         super().__init__(schema, port)
         self.server: Server = None
-        self.server_session: WebSocketServer = None
         self.client_session: Session = None
         self.loop = asyncio.get_event_loop()
 
     async def _start(self):
         s = SimpleListenerTest()
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
-        self.server_session: WebSocketServer = await self.server.config(config_handler).listen(
-            s).start()
+        self.server: Server = await (SocketD.create_server(ServerConfig(self.schema).port(self.port))
+                               .config(config_handler)
+                               .listen(s).start())
 
         serverUrl = self.schema + "://127.0.0.1:" + str(self.port) + "/path?u=a&p=2"
         self.client = SocketD.create_client(serverUrl) \
@@ -105,7 +101,7 @@ class TestCase12_sendAndSubscribe2rep(BaseTestCase):
         async def send_and_subscribe_test(entity):
             logger.debug(f"c::subscribe::{entity.data_as_string()} {entity}")
 
-        req: SubscribeStream = await self.client_session.send_and_subscribe("demo", StringEntity("hi"), 100)
+        req: SubscribeStream = self.client_session.send_and_subscribe("demo", StringEntity("hi"), 100)
         req.then_reply(send_and_subscribe_test)
         await asyncio.sleep(3)
 
@@ -116,8 +112,7 @@ class TestCase12_sendAndSubscribe2rep(BaseTestCase):
     async def _stop(self):
         if self.client_session:
             await self.client_session.close()
-        if self.server_session:
-            self.server_session.close()
+
         if self.server:
             await self.server.stop()
 

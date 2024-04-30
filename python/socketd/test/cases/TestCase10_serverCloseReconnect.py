@@ -1,17 +1,13 @@
 import asyncio
-import time
-from threading import Thread
 from typing import Optional
 
-from websockets.legacy.server import WebSocketServer
 from loguru import logger
 
 from socketd.transport.core.Listener import Listener
 from socketd.transport.core.Message import Message
 from socketd.transport.core.entity.StringEntity import StringEntity
 from socketd.transport.core.listener.EventListener import EventListener
-from socketd.transport.utils.AsyncUtil import AsyncUtil
-from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
+from socketd.utils.sync_api.AtomicRefer import AtomicRefer
 from test.modelu.BaseTestCase import BaseTestCase
 
 from socketd.transport.core.Session import Session
@@ -56,15 +52,14 @@ class TestCase10_serverCloseReconnect(BaseTestCase):
         super().__init__(schema, port)
         self.top: Optional[asyncio.Future]  = None
         self.server: Optional[Server] = None
-        self.server_session: Optional[WebSocketServer] = None
         self.client_session: Optional[Session] = None
         self.loop = asyncio.get_event_loop()
         self._simple = SimpleListenerTest()
 
     async def _start(self):
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
-        _server = self.server.config(config_handler).listen(self._simple)
-        self.server_session: WebSocketServer = await _server.start()
+        self.server: Server = await (SocketD.create_server(ServerConfig(self.schema).port(self.port)).config(config_handler)
+                               .listen(self._simple)
+                               .start())
 
         def do_on_close(session: Session):
             logger.debug("do_on_close")
@@ -73,13 +68,13 @@ class TestCase10_serverCloseReconnect(BaseTestCase):
 
         serverUrl = self.schema + "://127.0.0.1:" + str(self.port) + "/path?u=a&p=2"
         self.client_session: Session = await SocketD.create_client(serverUrl) \
-            .config(config_handler).listen(EventListener().do_on_close_handler(do_on_close)).open()
+            .config(config_handler).listen(EventListener().do_on_close(do_on_close)).open()
 
-        await self.client_session.send("/demo", StringEntity("test"))
+        self.client_session.send("/demo", StringEntity("test"))
 
         await asyncio.sleep(10)
-        await self.client_session.send("/demo", StringEntity("test"))
-        await self.client_session.send("/demo", StringEntity("test"))
+        self.client_session.send("/demo", StringEntity("test"))
+        self.client_session.send("/demo", StringEntity("test"))
         await asyncio.sleep(1)
         logger.info(f"counter {self._simple.server_counter.get()} ")
 
@@ -94,8 +89,7 @@ class TestCase10_serverCloseReconnect(BaseTestCase):
             await self.client_session.close()
         if self.top:
             self.top.set_result(0)
-        if self.server_session:
-            self.server_session.close()
+
         if self.server:
             await self.server.stop()
 

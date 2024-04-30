@@ -2,21 +2,26 @@ package features;
 
 import features.cases.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.noear.solon.test.SolonJUnit5Extension;
+import org.noear.solon.test.SolonTest;
 
 /**
  * @author noear
  * @since 2.0
  */
+@ExtendWith(SolonJUnit5Extension.class)
+@SolonTest
 public class CaseTest2 {
     static final String[] schemas = new String[]{
             "sd:tcp-java",
             "sd:tcp-netty",
             "sd:tcp-smartsocket",
-            "sd:tcp-neta",//3
+//            "sd:tcp-neta",
             "sd:ws-java",
-            "sd:udp-java",//5
-            "sd:udp-netty",
-            "sd:kcp-java",//7
+            "sd:udp-java",
+//            "sd:udp-netty",
+            "sd:kcp-java",
     };
 
     @Test

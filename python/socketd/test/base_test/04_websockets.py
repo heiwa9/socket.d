@@ -1,4 +1,3 @@
-import sys
 import unittest
 import asyncio
 import time
@@ -6,7 +5,7 @@ import time
 from loguru import logger
 from websockets import serve, WebSocketServerProtocol, connect
 
-from socketd.transport.utils.AsyncUtil import AsyncUtil
+from socketd.utils.AsyncUtils import AsyncUtils
 from test.uitls import calc_async_time
 
 
@@ -15,7 +14,7 @@ class Test_websockets(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._loop = asyncio.new_event_loop()
-        self.top = AsyncUtil.run_forever(self._loop)
+        self.top = AsyncUtils.run_forever(self._loop)
         # self._loop2 = asyncio.new_event_loop()
         # self.top2 = AsyncUtil.run_forever(self._loop2)
 

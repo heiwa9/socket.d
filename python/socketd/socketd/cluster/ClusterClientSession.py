@@ -5,14 +5,14 @@ from socketd.transport.core import Entity
 from socketd.transport.stream.RequestStream import RequestStream
 from socketd.transport.stream.SendStream import SendStream
 from socketd.transport.stream.SubscribeStream import SubscribeStream
-from socketd.transport.utils.StrUtil import StrUtil
+from socketd.utils.StrUtils import StrUtils
 
 
 class ClusterClientSession(ClientSession):
 
     def __init__(self, _sessionSet):
         self.__sessionSet: list[ClientSession] = _sessionSet
-        self.__sessionId = StrUtil.guid()
+        self.__sessionId = StrUtils.guid()
 
     def get_session_all(self) -> list[ClientSession]:
         return self.__sessionSet
@@ -45,20 +45,20 @@ class ClusterClientSession(ClientSession):
     def session_id(self) -> str:
         return self.__sessionId
 
-    async def send(self, event: str, content: Entity) -> SendStream:
+    def send(self, event: str, content: Entity) -> SendStream:
         sender = self.get_session_any(None)
 
-        return await sender.send(event, content)
+        return sender.send(event, content)
 
-    async def send_and_request(self, event: str, content: Entity, timeout: int) -> RequestStream:
+    def send_and_request(self, event: str, content: Entity, timeout: int) -> RequestStream:
         sender = self.get_session_any(None)
 
-        return await sender.send_and_request(event, content, timeout)
+        return sender.send_and_request(event, content, timeout)
 
-    async def send_and_subscribe(self, event: str, content: Entity, timeout: int = 0) -> SubscribeStream:
+    def send_and_subscribe(self, event: str, content: Entity, timeout: int = 0) -> SubscribeStream:
         sender = self.get_session_any(None)
 
-        return await sender.send_and_subscribe(event, content, timeout)
+        return sender.send_and_subscribe(event, content, timeout)
 
     async def preclose(self):
         for session in self.__sessionSet:

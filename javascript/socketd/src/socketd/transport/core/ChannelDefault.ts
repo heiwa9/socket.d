@@ -13,6 +13,7 @@ import {ChannelBase, ChannelInternal} from "./Channel";
 import {SessionDefault} from "./SessionDefault";
 import type { IoBiConsumer } from "./Typealias";
 import {SocketAddress} from "./SocketAddress";
+import {RunUtils} from "../../utils/RunUtils";
 
 export class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
     private _source: S;
@@ -186,22 +187,33 @@ export class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
 
     close(code) {
         try {
-            let closeCodeOld = this._closeCode;
             this._closeCode = code;
 
             super.close(code);
 
-            if (closeCodeOld > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING
-                && code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
-                //如果有效且非预关闭，则尝试关闭源 //外面的 sendClose 是异步的，所以晚会儿关闭
-                setTimeout(() => {
-                    this._assistant.close(this._source);
-                }, 100);
+            if (code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+                if (this._assistant.isValid(this._source)) {
+                    //如果有效且非预关闭，则尝试关闭源 //外面的 sendClose 是异步的，所以晚会儿关闭
+                    setTimeout(() => {
+                        this._assistant.close(this._source);
+                    }, 100);
 
-                console.debug(`${this.getConfig().getRoleName()} channel closed, sessionId=${this.getSession().sessionId()}`);
+                    console.debug(`${this.getConfig().getRoleName()} channel closed, sessionId=${this.getSession().sessionId()}`);
+                }
             }
         } catch (e) {
             console.warn(`${this.getConfig().getRoleName()} channel close error, sessionId=${this.getSession().sessionId()}`, e);
+        }
+
+        if (code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
+            this.onCloseDo();
+        }
+    }
+    private _isCloseNotified:boolean = false;
+    private onCloseDo(){
+        if (this._isCloseNotified == false) {
+            this._isCloseNotified = true;
+            this._processor.doCloseNotice(this);
         }
     }
 }

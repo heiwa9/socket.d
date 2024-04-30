@@ -9,7 +9,7 @@ from socketd.transport.core.Frame import Frame
 from socketd.transport.core.Message import Message
 from abc import abstractmethod, ABC
 
-from socketd.transport.stream.StreamManger import StreamInternal
+from socketd.transport.stream.Stream import StreamInternal
 
 
 class Channel(ABC):
@@ -87,7 +87,7 @@ class Channel(ABC):
         ...
 
     @abstractmethod
-    def retrieve(self, frame: Frame, stream: StreamInternal) -> None:
+    async def retrieve(self, frame: Frame, stream: StreamInternal) -> None:
         ...
 
     @abstractmethod

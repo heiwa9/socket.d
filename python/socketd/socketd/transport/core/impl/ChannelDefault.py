@@ -1,5 +1,6 @@
 import asyncio
 import time
+import traceback
 from typing import TypeVar, Optional
 
 from socketd.transport.core import Entity
@@ -8,9 +9,9 @@ from socketd.transport.core.ChannelInternal import ChannelInternal
 from socketd.transport.core.ChannelSupporter import ChannelSupporter
 from socketd.transport.core.Message import MessageInternal, Message
 from socketd.transport.core.entity.MessageBuilder import MessageBuilder
-from socketd.transport.core.impl.LogConfig import log
-from socketd.transport.stream.Stream import Stream
-from socketd.transport.stream.StreamManger import StreamManger, StreamInternal
+from socketd.utils.LogConfig import log
+from socketd.transport.stream.Stream import Stream, StreamInternal
+from socketd.transport.stream.StreamManger import StreamManger
 from socketd.transport.core.impl.ChannelBase import ChannelBase
 from socketd.transport.core.Costants import Constants
 from socketd.transport.core.Flags import Flags
@@ -18,7 +19,8 @@ from socketd.transport.core.EntityMetas import EntityMetas
 from socketd.transport.core.Session import Session
 from socketd.transport.core.impl.SessionDefault import SessionDefault
 from socketd.transport.core.Frame import Frame
-from socketd.transport.utils.CompletableFuture import CompletableFuture
+from socketd.utils.CompletableFuture import CompletableFuture
+from socketd.utils.RunUtils import RunUtils
 
 S = TypeVar("S")
 
@@ -38,6 +40,7 @@ class ChannelDefault(ChannelBase, ChannelInternal):
         self._session: Optional[Session] = None
         self._liveTime: Optional[float] = None
         self._closeCode: int = 0
+        self._isCloseNotified = False;
 
     def is_valid(self) -> bool:
         return self.is_closed() == 0 and self._assistant.is_valid(self._source)
@@ -106,7 +109,7 @@ class ChannelDefault(ChannelBase, ChannelInternal):
         if stream is not None:
             stream.on_progress(True, 1, 1)
 
-    def retrieve(self, frame: Frame, stream: StreamInternal) -> None:
+    async def retrieve(self, frame: Frame, stream: StreamInternal) -> None:
         """接收（接收答复帧）"""
         if stream is not None:
             if stream.demands() < Constants.DEMANDS_MULTIPLE or frame.flag() == Flags.ReplyEnd:
@@ -115,11 +118,11 @@ class ChannelDefault(ChannelBase, ChannelInternal):
 
             if stream.demands() < Constants.DEMANDS_MULTIPLE:
                 # 单收时，内部已经是异步机制
-                stream.on_reply(frame.message())
+                await stream.on_reply(frame.message())
             else:
-                #stream.on_reply(frame.message())
                 # 改为异步处理，避免卡死Io线程
-                asyncio.get_running_loop().run_in_executor(self.get_config().get_exchange_executor(), lambda _m: asyncio.run(stream.on_reply(_m)), frame.message())
+                asyncio.get_running_loop().run_in_executor(self.get_config().get_exchange_executor(),
+                                                           lambda _m: asyncio.run(stream.on_reply(_m)), frame.message())
         else:
             log.debug(
                 f"{self.get_config().get_role_name()} stream not found, sid={frame.message().sid()}, sessionId={self.get_session().session_id()}")
@@ -158,16 +161,25 @@ class ChannelDefault(ChannelBase, ChannelInternal):
 
     async def close(self, code):
         try:
-            closeCodeOld = self._closeCode;
             self._closeCode = code
 
-            await super().close(code)
+            await RunUtils.waitTry(super().close(code))
 
-            if closeCodeOld > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING and code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING:
-                # 如果有效且非预关闭，则尝试关闭源
-                await self._assistant.close(self._source)
-                log.debug(
-                    f"{self.get_config().get_role_name()} channel closed, sessionId={self.get_session().session_id()}")
+            if code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING:
+                if self._assistant.is_valid(self._source):
+                    # 如果有效且非预关闭，则尝试关闭源
+                    await RunUtils.waitTry(self._assistant.close(self._source))
+                    log.debug(f"{self.get_config().get_role_name()} channel closed, sessionId={self.get_session().session_id()}")
         except Exception as e:
-            log.warning(f"{self.get_config().get_role_name()} channel close error, "
-                        f"sessionId={self.get_session().session_id()} : {e}")
+            e_msg = traceback.format_exc()
+            log.warning(f"{self.get_config().get_role_name()} channel close error, sessionId={self.get_session().session_id()} \n{e_msg}")
+
+        if code > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING:
+            self.on_close_do()
+
+
+    def on_close_do(self):
+        if self._isCloseNotified == False:
+            self._isCloseNotified = True
+            self._processor.do_close_notice(self)
+

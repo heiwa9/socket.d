@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 from asyncio import Future
 
 from socketd.exception.SocketDExecption import SocketDException, SocketDChannelException
@@ -6,14 +7,14 @@ from socketd.transport.client.Client import ClientInternal
 from socketd.transport.core.Asserts import Asserts
 from socketd.transport.core.ChannelInternal import ChannelInternal
 from socketd.transport.core.Costants import Constants
+from socketd.utils.LogConfig import log
 from socketd.transport.core.impl.SessionDefault import SessionDefault
-from socketd.transport.stream.StreamManger import StreamInternal
+from socketd.transport.stream.Stream import StreamInternal
 from socketd.transport.core.impl.ChannelBase import ChannelBase
 from socketd.transport.client.ClientConnector import ClientConnector
-from loguru import logger
 
 from socketd.transport.client.ClientHeartbeatHandler import ClientHeartbeatHandlerDefault
-from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
+from socketd.utils.sync_api.AtomicRefer import AtomicRefer
 
 
 class ClientChannel(ChannelBase):
@@ -40,7 +41,8 @@ class ClientChannel(ChannelBase):
             if not self.__heartbeatScheduledFuture.done():
                 self.__heartbeatScheduledFuture.cancel()
         except Exception as e:
-            logger.warning(e)
+            e_msg = traceback.format_exc()
+            log.warning(e_msg)
 
     async def __heartbeatScheduled(self) -> None:
         while True:
@@ -60,7 +62,7 @@ class ClientChannel(ChannelBase):
                 return
 
             if Asserts.is_closed_and_end(self.__real):
-                logger.debug("Client channel is closed (pause heartbeat), sessionId=" + self.get_session().session_id())
+                log.debug("Client channel is closed (pause heartbeat), sessionId=" + self.get_session().session_id())
                 await self.close(self.__real.is_closed())
                 return
 
@@ -136,7 +138,7 @@ class ClientChannel(ChannelBase):
             if self.__real:
                 await self.__real.close(code)
         except Exception as e:
-            logger.error(e)
+            log.error(e)
         finally:
             await super().close(code)
 
@@ -150,7 +152,7 @@ class ClientChannel(ChannelBase):
         self.init_heartbeat()
         await self.internalCheck()
 
-    @logger.catch
+    @log.catch
     async def connect(self):
         with self.__isConnecting as isConnected:
             if isConnected:
@@ -166,9 +168,9 @@ class ClientChannel(ChannelBase):
             self.__real.set_session(self.__sessionShell)
             self.set_handshake(self.__real.get_handshake())
         except TimeoutError as t:
-            logger.error(f"socketD connect timed out: {t}")
+            log.error(f"socketD connect timed out: {t}")
         except Exception as e:
-            logger.error(e)
+            log.error(e)
             raise SocketDChannelException(f"socketD connect")
         finally:
             self.__isConnecting.set(False)

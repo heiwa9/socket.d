@@ -2,11 +2,9 @@ import asyncio
 
 from socketd.transport.core.Listener import Listener
 from socketd.transport.core.Message import Message
-from socketd.transport.core.impl.LogConfig import log
-from socketd.transport.utils.sync_api.AtomicRefer import AtomicRefer
+from socketd.utils.LogConfig import log
+from socketd.utils.sync_api.AtomicRefer import AtomicRefer
 from test.modelu.BaseTestCase import BaseTestCase
-
-from websockets.legacy.server import WebSocketServer
 
 from socketd.transport.core.Session import Session
 from socketd import SocketD
@@ -48,26 +46,25 @@ class TestCase07_url_auth(BaseTestCase):
     def __init__(self, schema, port):
         super().__init__(schema, port)
         self.server: Server = None
-        self.server_session: WebSocketServer = None
         self.client_session: Session = None
         self.loop = asyncio.get_event_loop()
 
     async def _start(self):
         s = SimpleListenerTest()
-        self.server: Server = SocketD.create_server(ServerConfig(self.schema).port(self.port))
-        self.server_session: WebSocketServer = await self.server.config(config_handler).listen(
-            s).start()
+        self.server: Server = await (SocketD.create_server(ServerConfig(self.schema).port(self.port))
+                               .config(config_handler).listen(s)
+                               .start())
         serverUrl = self.schema + "://127.0.0.1:" + str(self.port) + "/path?auth=root"
         self.client_session: Session = await SocketD.create_client(serverUrl) \
             .config(config_handler).open()
         try:
-            await self.client_session.send("demo", StringEntity("root").meta_put("name", "root"))
+            self.client_session.send("demo", StringEntity("root").meta_put("name", "root"))
             await self.client_session.close()
             serverUrl = self.schema + "://127.0.0.1:" + str(self.port) + "/path?auth=123"
             self.client_session: Session = await SocketD.create_client(serverUrl) \
                 .config(config_handler).open()
 
-            await self.client_session.send("demo", StringEntity("test").meta_put("name", "bai"))
+            self.client_session.send("demo", StringEntity("test").meta_put("name", "bai"))
         except Exception as e:
             log.error(e)
         log.info(f" message {s.message_counter.get()}")
@@ -80,8 +77,6 @@ class TestCase07_url_auth(BaseTestCase):
         if self.client_session:
             await self.client_session.close()
 
-        if self.server_session:
-            self.server_session.close()
         if self.server:
             await self.server.stop()
 

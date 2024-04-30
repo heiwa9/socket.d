@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * sendAndRequest() 超时
+ * 测试：客户端发送元信息鉴权
  *
  * @author noear
  * @since 2.0
@@ -74,6 +74,8 @@ public class TestCase30_meta_auth extends BaseTestCase {
                 .config(c->c.metaPut("u","noear").metaPut("p","2"))
                 .openOrThow();
         clientSession.send("/demo", new StringEntity("hi"));
+
+        Thread.sleep(10);
 
         //会失败
         try {

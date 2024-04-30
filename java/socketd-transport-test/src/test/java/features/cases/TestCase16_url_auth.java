@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * sendAndRequest() 超时
+ * 测试：url 鉴权
  *
  * @author noear
  * @since 2.0
@@ -72,6 +72,8 @@ public class TestCase16_url_auth extends BaseTestCase {
         //会成功
         clientSession = SocketD.createClient(getSchema() + "://127.0.0.1:" + getPort() + "/?u=noear&p=2").openOrThow();
         clientSession.send("/demo", new StringEntity("hi"));
+
+        Thread.sleep(10);
 
         //会失败
         try {
