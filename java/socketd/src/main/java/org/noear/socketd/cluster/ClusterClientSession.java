@@ -80,6 +80,17 @@ public class ClusterClientSession implements ClientSession {
     }
 
     @Override
+    public boolean isActive() {
+        for (ClientSession session : sessionList) {
+            if (session.isActive()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Override
     public boolean isClosing() {
         for (ClientSession session : sessionList) {
             if (session.isClosing()) {
@@ -88,6 +99,15 @@ public class ClusterClientSession implements ClientSession {
         }
 
         return false;
+    }
+
+    @Override
+    public int closeCode() {
+        for (ClientSession session : sessionList) {
+            return session.closeCode();
+        }
+
+        return 0;
     }
 
     @Override

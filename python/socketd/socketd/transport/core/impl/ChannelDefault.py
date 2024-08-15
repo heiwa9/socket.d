@@ -40,15 +40,16 @@ class ChannelDefault(ChannelBase, ChannelInternal):
         self._session: Optional[Session] = None
         self._liveTime: Optional[float] = None
         self._closeCode: int = 0
-        self._isCloseNotified = False;
+        self._isCloseNotified = False
+        self._alarmCode: int = 0
 
     def is_valid(self) -> bool:
-        return self.is_closed() == 0 and self._assistant.is_valid(self._source)
+        return self.close_code() == 0 and self._assistant.is_valid(self._source)
 
     def is_closing(self) -> bool:
         return self._closeCode == Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING
 
-    def is_closed(self):
+    def close_code(self):
         if self._closeCode > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING:
             return self._closeCode
         else:
@@ -59,6 +60,9 @@ class ChannelDefault(ChannelBase, ChannelInternal):
 
     def set_live_time_as_now(self):
         self._liveTime = time.time()
+
+    def set_alarm_code(self, alarm_code:int):
+        self._alarmCode = alarm_code
 
     def get_remote_address(self) -> str:
         return self._assistant.get_remote_address(self._source)
@@ -74,13 +78,20 @@ class ChannelDefault(ChannelBase, ChannelInternal):
         else:
             log.debug(f"S-SEN:{frame}")
 
-        if self.get_config().is_nolock_send():
+        with self:
             await self.send_do(frame, stream)
-        else:
-            with self:
-                await self.send_do(frame, stream)
 
     async def send_do(self, frame: Frame, stream: StreamInternal):
+        if self._alarmCode == Constants.ALARM3001_PRESSURE:
+            if frame.flag() >= Flags.Message and frame.flag() <= Flags.Subscribe:
+                if frame.message().meta(EntityMetas.META_X_UNLIMITED) is None:
+                    try:
+                        log.debug("Too much pressure, sleep=100ms")
+                        self.set_alarm_code(0)
+                        time.sleep(0.1)
+                    except Exception as e:
+                        ... #略过
+
         if frame.message() is not None:
             message: Message = frame.message()
             # 注册流接收器
@@ -100,32 +111,14 @@ class ChannelDefault(ChannelBase, ChannelInternal):
                         messageNew = MessageBuilder().flag(frame.flag()).sid(message.sid()).event(
                             message.event()).entity(fragmentEntity).build()
                         fragmentFrame = Frame(frame.flag(), messageNew)
-                    await self._assistant.write(self._source, fragmentFrame)
+                    await self._processor.send_frame(self, fragmentFrame, self._assistant, self._source)
 
                 await self.get_config().get_fragment_handler().split_fragment(self, stream, message, __consumer)
             return
 
-        await self._assistant.write(self._source, frame)
+        await self._processor.send_frame(self, frame, self._assistant, self._source)
         if stream is not None:
             stream.on_progress(True, 1, 1)
-
-    async def retrieve(self, frame: Frame, stream: StreamInternal) -> None:
-        """接收（接收答复帧）"""
-        if stream is not None:
-            if stream.demands() < Constants.DEMANDS_MULTIPLE or frame.flag() == Flags.ReplyEnd:
-                # 如果是单收或者答复结束，则移除流接收器
-                self._streamManger.remove_stream(frame.message().sid())
-
-            if stream.demands() < Constants.DEMANDS_MULTIPLE:
-                # 单收时，内部已经是异步机制
-                await stream.on_reply(frame.message())
-            else:
-                # 改为异步处理，避免卡死Io线程
-                asyncio.get_running_loop().run_in_executor(self.get_config().get_exchange_executor(),
-                                                           lambda _m: asyncio.run(stream.on_reply(_m)), frame.message())
-        else:
-            log.debug(
-                f"{self.get_config().get_role_name()} stream not found, sid={frame.message().sid()}, sessionId={self.get_session().session_id()}")
 
     def reconnect(self):
         ...

@@ -8,7 +8,6 @@ import org.noear.socketd.transport.java_udp.impl.DatagramTagert;
 import org.noear.socketd.transport.client.ClientConnectorBase;
 import org.noear.socketd.transport.core.Flags;
 import org.noear.socketd.transport.core.impl.ChannelDefault;
-import org.noear.socketd.utils.RunUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +25,8 @@ public class UdpBioClientConnector extends ClientConnectorBase<UdpBioClient> {
     private static final Logger log = LoggerFactory.getLogger(UdpBioClientConnector.class);
 
     private DatagramSocket real;
-    private Thread clientThread;
+    private Thread receiveThread;
+    private Thread connectThread;
 
     public UdpBioClientConnector(UdpBioClient client) {
         super(client);
@@ -39,13 +39,14 @@ public class UdpBioClientConnector extends ClientConnectorBase<UdpBioClient> {
 
         CompletableFuture<ClientHandshakeResult> handshakeFuture = new CompletableFuture<>();
 
-        RunUtils.async(() -> {
+        connectThread = new Thread(() -> {
             try {
                 connectDo(handshakeFuture);
             } catch (Throwable e) {
                 handshakeFuture.complete(new ClientHandshakeResult(null, e));
             }
         });
+        connectThread.start();
 
         try {
             //等待握手结果
@@ -83,21 +84,21 @@ public class UdpBioClientConnector extends ClientConnectorBase<UdpBioClient> {
 
 
         //定义接收线程
-        clientThread = new Thread(() -> {
+        receiveThread = new Thread(() -> {
             try {
                 receive(channel, real, handshakeFuture);
             } catch (Throwable e) {
                 throw new IllegalStateException(e);
             }
         });
-        clientThread.start();
+        receiveThread.start();
 
         //开始发连接包
         channel.sendConnect(client.getConfig().getUrl(), client.getConfig().getMetaMap());
     }
 
     private void receive(ChannelInternal channel, DatagramSocket socket, CompletableFuture<ClientHandshakeResult> handshakeFuture) {
-        while (!clientThread.isInterrupted()) {
+        while (!receiveThread.isInterrupted()) {
             try {
                 if (socket.isClosed()) {
                     client.getProcessor().onClose(channel);
@@ -112,7 +113,7 @@ public class UdpBioClientConnector extends ClientConnectorBase<UdpBioClient> {
                         });
                     }
 
-                    client.getProcessor().onReceive(channel, frame.getFrame());
+                    client.getProcessor().reveFrame(channel, frame.getFrame());
                 }
 
             } catch (Exception e) {
@@ -138,8 +139,12 @@ public class UdpBioClientConnector extends ClientConnectorBase<UdpBioClient> {
                 real.close();
             }
 
-            if (clientThread != null) {
-                clientThread.interrupt();
+            if (receiveThread != null) {
+                receiveThread.interrupt();
+            }
+
+            if (connectThread != null) {
+                connectThread.interrupt();
             }
         } catch (Throwable e) {
             if (log.isDebugEnabled()) {

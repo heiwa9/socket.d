@@ -13,6 +13,10 @@ class ClientSession:
         ...
 
     @abc.abstractmethod
+    def is_active(self) -> bool:
+        ...
+
+    @abc.abstractmethod
     def is_closing(self)->bool:
         ...
 
@@ -25,11 +29,11 @@ class ClientSession:
         ...
 
     @abc.abstractmethod
-    def send_and_request(self, event: str, content: Entity, timeout: int = 0) -> RequestStream:
+    def send_and_request(self, event: str, content: Entity, timeout: float = 0) -> RequestStream:
         ...
 
     @abc.abstractmethod
-    def send_and_subscribe(self, event: str, content: Entity, timeout: int = 0) -> SubscribeStream:
+    def send_and_subscribe(self, event: str, content: Entity, timeout: float = 0) -> SubscribeStream:
         ...
 
     @abc.abstractmethod

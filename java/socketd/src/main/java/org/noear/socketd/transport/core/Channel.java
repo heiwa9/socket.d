@@ -34,9 +34,9 @@ public interface Channel {
     boolean isClosing();
 
     /**
-     * 是否已关闭
+     * 关闭代码
      */
-    int isClosed();
+    int closeCode();
 
     /**
      * 关闭（1协议关，2用户关）
@@ -99,16 +99,21 @@ public interface Channel {
     void sendPong() throws IOException;
 
     /**
-     * 发送 Close
+     * 发送关闭
      *
      * @param code 关闭代码
      */
     void sendClose(int code) throws IOException;
 
     /**
-     * 发送告警
+     * 发送告警（中断当前处理）
      */
-    void sendAlarm(Message from, String alarm) throws IOException;
+    void sendAlarm(Message from, Entity alarm) throws IOException;
+
+    /**
+     * 发送压力（不中断当前处理）
+     */
+    void sendPressure(Message form, Entity pressure) throws IOException;
 
     /**
      * 发送
@@ -118,13 +123,6 @@ public interface Channel {
      */
     void send(Frame frame, StreamInternal stream) throws IOException;
 
-    /**
-     * 接收（接收答复帧）
-     *
-     * @param frame  帧
-     * @param stream 流
-     */
-    void retrieve(Frame frame, StreamInternal stream);
 
     /**
      * 手动重连（一般是自动）
@@ -140,4 +138,18 @@ public interface Channel {
      * 获取会话
      */
     Session getSession();
+
+
+    /**
+     * @deprecated 2.5
+     * */
+    @Deprecated
+    default void writeAcquire(Frame frame){}
+
+
+    /**
+     * @deprecated 2.5
+     * */
+    @Deprecated
+    default void writeRelease(Frame frame){}
 }

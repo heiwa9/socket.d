@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "org.noear.socketd.android_test"
-        minSdk = 30
+        minSdk = 28
         targetSdk = 33
         versionCode = 1
         versionName = "1.0"
@@ -67,10 +67,10 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-//    implementation("org.noear:socketd-transport-smartsocket:2.4.14")
-    implementation("org.noear:socketd-transport-java-tcp:2.4.14")
-    implementation("org.noear:socketd-transport-java-udp:2.4.14")
-    implementation("org.noear:socketd-transport-java-websocket:2.4.14")
+//    implementation("org.noear:socketd-transport-smartsocket:2.5.11")
+    implementation("org.noear:socketd-transport-java-tcp:2.5.11")
+    implementation("org.noear:socketd-transport-java-udp:2.5.11")
+    implementation("org.noear:socketd-transport-java-websocket:2.5.11")
 
     implementation("com.github.tony19:logback-android:3.0.0")
 }

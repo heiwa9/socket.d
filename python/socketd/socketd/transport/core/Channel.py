@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, Optional
 from asyncio import Future
 
+from socketd.transport.core import Entity
 from socketd.transport.core.HandshakeDefault import HandshakeDefault
 from socketd.transport.core.Session import Session
 from socketd.transport.core.Config import Config
@@ -30,7 +31,7 @@ class Channel(ABC):
         ...
 
     @abstractmethod
-    def is_closed(self) -> int:
+    def close_code(self) -> int:
         ...
 
     @abstractmethod
@@ -79,16 +80,18 @@ class Channel(ABC):
         ...
 
     @abstractmethod
-    async def send_alarm(self, _from: Message, alarm:str) -> None:
+    async def send_alarm(self, _from: Message, alarm:Entity) -> None:
         ...
+
+    @abstractmethod
+    async def send_pressure(self, _from: Message, pressure: Entity) -> None:
+        ...
+
 
     @abstractmethod
     async def send(self, frame: 'Frame', stream: Optional[StreamInternal]) -> None:
         ...
 
-    @abstractmethod
-    async def retrieve(self, frame: Frame, stream: StreamInternal) -> None:
-        ...
 
     @abstractmethod
     def get_session(self) -> Session:

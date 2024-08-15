@@ -1,3 +1,58 @@
+### 2.5.10
+* 添加 websocket 子协议验证开关控制
+* smartsocket 升为 1.5.50
+
+### 2.5.9
+* 修复 socketd-transport-spring-websocket 不能通过子协议验证的问题
+
+### 2.5.8
+* smartsocket 升为 1.5.46
+
+### 2.5.7
+* 添加 静态 spi 加载方式（避免某些打包方案让 java spi 失效）
+
+### 2.5.6
+* smartsocket 升为 1.5.44
+
+### 2.5.4
+* 添加 新的每秒帧流量控制接口 TrafficLimiter
+* 添加 Listener:onReply, onSend 方法，方便帧流量统计
+* 添加 FrameIoHandler 接口，强化 Processor 的帧输入输出强控地位
+* 移除 旧的基于信号量的流量控制方式
+
+### 2.5.2
+* 添加 SessionUtils 工具类
+* 添加 Session::isActive() 
+* 移除 LoadBalancer:isActive() 接口
+ 
+### 2.5.1
+* 添加 写信号控制（避免 netty 写过了暴内存）
+
+### 2.5.0
+* 添加 java-websocket 适配子协议验证（避免乱连）
+* 添加 spring-websocket 适配子协议验证（避免乱连）
+* 添加 BroadcastBroker 接口（提供类似 stomp 的体验）
+* 添加 LoadBalancer:isActive 接口
+* 修复 server.stop 后不能自动退出的进程问题
+* 修复 session.close() 后不能自动退出的进程问题
+
+### 2.4.18
+* 优化 内存超限提示
+
+### 2.4.17
+* 添加 内存战比限制支持
+* 添加 EntityMetas.META_X_UNLIMITED
+* 添加 EntityMetas.META_X_HASH, 另 META_X_Hash 标为弃用
+
+### 2.4.16
+* 添加 ListenerWrapper 类，方便应用定制
+
+### 2.4.15
+* 添加 Session::attrDel 接口
+* 优化 java-websocket 适配，增加 header 转移
+* 优化 spring-websocket 适配，增加 header 转移
+* 优化 java-websocket 适配，增加 setReuseAddr(true) 配置
+
 ### 2.4.12
 * 调整 Processor:onError 添加 try-catch 处理
 * 优化 socketd-transport-netty udp 的连接状态管理

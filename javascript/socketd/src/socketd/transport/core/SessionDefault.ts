@@ -1,20 +1,22 @@
 import {SessionBase} from "./Session";
 import type {Channel} from "./Channel";
 import type {Handshake} from "./Handshake";
-import {Entity, EntityDefault} from "./Entity";
+import {Entity} from "./Entity";
 import {Message, MessageBuilder} from "./Message";
 import {Frame} from "./Frame";
 import {Constants} from "./Constants";
 import {Flags} from "./Flags";
 import {
-    SendStreamImpl,
     RequestStream,
-    RequestStreamImpl,
     SubscribeStream,
-    SubscribeStreamImpl,
     type SendStream
 } from "../stream/Stream";
 import {SocketAddress} from "./SocketAddress";
+import {EntityDefault} from "./entity/EntityDefault";
+import {SendStreamImpl} from "../stream/impl/SendStreamImpl";
+import {RequestStreamImpl} from "../stream/impl/RequestStreamImpl";
+import {SubscribeStreamImpl} from "../stream/impl/SubscribeStreamImpl";
+import {StringEntity} from "./entity/StringEntity";
 
 /**
  * 会话默认实现
@@ -100,8 +102,12 @@ export class SessionDefault extends SessionBase {
         this._channel.sendPing();
     }
 
-    sendAlarm(from: Message, alarm: string) {
-        this._channel.sendAlarm(from, alarm);
+    sendAlarm(from: Message, alarm: Entity | string) {
+        if (typeof alarm !== "string") {
+            this._channel.sendAlarm(from, alarm);
+        } else {
+            this._channel.sendAlarm(from, new StringEntity(alarm));
+        }
     }
 
     /**

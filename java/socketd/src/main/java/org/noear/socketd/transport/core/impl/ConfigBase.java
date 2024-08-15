@@ -49,12 +49,12 @@ public abstract class ConfigBase<T extends Config> implements Config {
     protected int ioThreads;
     //解码线程数
     protected int codecThreads;
-    //交换线程数
-    protected int exchangeThreads;
+    //工作线程数
+    protected int workThreads;
 
-    //交换执行器
-    private volatile ExecutorService exchangeExecutor;
-    private volatile ExecutorService exchangeExecutorSelfNew;
+    //工作执行器
+    private volatile ExecutorService workExecutor;
+    private volatile ExecutorService workExecutorSelfNew;
 
     //读缓冲大小
     protected int readBufferSize;
@@ -69,6 +69,14 @@ public abstract class ConfigBase<T extends Config> implements Config {
     protected long streamTimeout;
     //最大udp包大小
     protected int maxUdpSize;
+    //使用最大内存限制
+    private boolean useMaxMemoryLimit;
+    //最大内存比例
+    protected float maxMemoryRatio;
+    //帧率处理器
+    protected TrafficLimiter trafficLimiter;
+    //使用子协议
+    protected boolean useSubprotocols;
 
     public ConfigBase(boolean clientMode) {
         this.clientMode = clientMode;
@@ -85,16 +93,25 @@ public abstract class ConfigBase<T extends Config> implements Config {
         this.fragmentSize = Constants.MAX_SIZE_DATA;
 
         this.ioThreads = 1;
-        this.codecThreads = Runtime.getRuntime().availableProcessors();
-        this.exchangeThreads = Runtime.getRuntime().availableProcessors() * 4;
 
-        this.readBufferSize = 1024 * 4; //4k
-        this.writeBufferSize = 1024 * 4;
+        this.codecThreads = Runtime.getRuntime().availableProcessors();
+        this.workThreads = Runtime.getRuntime().availableProcessors() * 4;
+
+
+        this.readBufferSize = 1024 * 8; //8k
+        this.writeBufferSize = 1024 * 8;
 
         this.idleTimeout = 60_000L; //60秒（心跳默认为20秒）
         this.requestTimeout = 10_000L; //10秒（默认与连接超时同）
         this.streamTimeout = 1000 * 60 * 60 * 2;//2小时 //避免永不回调时，不能释放
         this.maxUdpSize = 2048; //2k //与 netty 保持一致 //实际可用 1464
+        this.maxMemoryRatio = 0.0F;
+        this.useMaxMemoryLimit = false;
+
+        this.useSubprotocols = true;
+
+        //给测试加默认
+        //this.trafficLimiter = new TrafficLimiterDefault(100_000);
     }
 
     /**
@@ -261,37 +278,47 @@ public abstract class ConfigBase<T extends Config> implements Config {
      * 获取交换执行器
      */
     @Override
-    public ExecutorService getExchangeExecutor() {
-        if (exchangeExecutor == null) {
+    public ExecutorService getWorkExecutor() {
+        if (workExecutor == null) {
             EXECUTOR_LOCK.lock();
             try {
-                if (exchangeExecutor == null) {
-                    int nThreads = getExchangeThreads();
-                    exchangeExecutor = exchangeExecutorSelfNew = new ThreadPoolExecutor(nThreads, nThreads,
+                if (workExecutor == null) {
+                    int nThreads = getWorkThreads();
+                    workExecutor = workExecutorSelfNew = new ThreadPoolExecutor(nThreads, nThreads,
                             0L, TimeUnit.MILLISECONDS,
                             new LinkedBlockingQueue<Runnable>(),
-                            new NamedThreadFactory("Socketd-channelExecutor-"));
+                            new NamedThreadFactory("Socketd-work-").daemon(true));
                 }
             } finally {
                 EXECUTOR_LOCK.unlock();
             }
         }
 
-        return exchangeExecutor;
+        return workExecutor;
     }
 
     /**
      * 配置交换执行器
      */
-    public T exchangeExecutor(ExecutorService exchangeExecutor) {
-        this.exchangeExecutor = exchangeExecutor;
+    public T workExecutor(ExecutorService workExecutor) {
+        this.workExecutor = workExecutor;
 
-        if (exchangeExecutorSelfNew != null) {
+        if (workExecutorSelfNew != null) {
             //谁 new 的，谁 shutdown
-            exchangeExecutorSelfNew.shutdown();
+            workExecutorSelfNew.shutdown();
         }
 
         return (T) this;
+    }
+
+    /**
+     * 配置交换执行器
+     *
+     * @deprecated 2.4
+     */
+    @Deprecated
+    public T exchangeExecutor(ExecutorService workExecutor) {
+        return workExecutor(workExecutor);
     }
 
     /**
@@ -330,16 +357,26 @@ public abstract class ConfigBase<T extends Config> implements Config {
      * 获取交换线程数
      */
     @Override
-    public int getExchangeThreads() {
-        return exchangeThreads;
+    public int getWorkThreads() {
+        return workThreads;
     }
 
     /**
      * 配置交换线程数
      */
-    public T exchangeThreads(int exchangeThreads) {
-        this.exchangeThreads = exchangeThreads;
+    public T workThreads(int workThreads) {
+        this.workThreads = workThreads;
         return (T) this;
+    }
+
+    /**
+     * 配置交换线程数
+     *
+     * @deprecated 2.4
+     */
+    @Deprecated
+    public T exchangeThreads(int workThreads) {
+        return workThreads(workThreads);
     }
 
 
@@ -435,5 +472,63 @@ public abstract class ConfigBase<T extends Config> implements Config {
     public T maxUdpSize(int maxUdpSize) {
         this.maxUdpSize = maxUdpSize;
         return (T) this;
+    }
+
+    /**
+     * 使用最大内存限制
+     */
+    @Override
+    public boolean useMaxMemoryLimit() {
+        return useMaxMemoryLimit;
+    }
+
+    /**
+     * 允许最大内存使用比例（0.x->1.0）
+     */
+    @Override
+    public float getMaxMemoryRatio() {
+        return maxMemoryRatio;
+    }
+
+    /**
+     * 配置允许最大内存使用比例（0.x->1.0）
+     */
+    public T maxMemoryRatio(float maxMemoryRatio) {
+        this.maxMemoryRatio = maxMemoryRatio;
+        //太低不启用
+        this.useMaxMemoryLimit = maxMemoryRatio > 0.2F;
+        return (T) this;
+    }
+
+    /**
+     * 帧率处理器
+     */
+    @Override
+    public TrafficLimiter getTrafficLimiter() {
+        return trafficLimiter;
+    }
+
+    /**
+     * 配置帧率处理器
+     */
+    public T trafficLimiter(TrafficLimiter trafficLimiter) {
+        this.trafficLimiter = trafficLimiter;
+        return (T) this;
+    }
+
+    /**
+     * 配置使用子协议
+     */
+    public T useSubprotocols(boolean useSubprotocols) {
+        this.useSubprotocols = useSubprotocols;
+        return (T) this;
+    }
+
+    /**
+     * 是否使用子协议
+     */
+    @Override
+    public boolean isUseSubprotocols() {
+        return useSubprotocols;
     }
 }

@@ -8,6 +8,7 @@ import org.noear.socketd.transport.client.Client;
 import org.noear.socketd.transport.client.ClientConfig;
 import org.noear.socketd.transport.server.Server;
 import org.noear.socketd.transport.server.ServerConfig;
+import org.noear.socketd.utils.ProviderUtils;
 
 import java.util.HashMap;
 import java.util.List;
@@ -24,7 +25,14 @@ public class SocketD {
      * 框架版本号
      */
     public static String version() {
-        return "2.4.14";
+        return "2.5.11";
+    }
+
+    /**
+     * 协议名
+     */
+    public static String protocolName() {
+        return "Socket.D";
     }
 
     /**
@@ -37,20 +45,17 @@ public class SocketD {
     /**
      * 客户端提供者
      */
-    static Map<String, ClientProvider> clientProviderMap;
+    private static Map<String, ClientProvider> clientProviderMap = new HashMap<>();
 
     /**
      * 服务端提供者
      */
-    static Map<String, ServerProvider> serverProviderMap;
+    private static Map<String, ServerProvider> serverProviderMap = new HashMap<>();
 
     /**
      * 加载 spi
      * */
     static {
-        clientProviderMap = new HashMap<>();
-        serverProviderMap = new HashMap<>();
-
         ServiceLoader.load(ClientProvider.class).iterator().forEachRemaining(clientProvider -> {
             registerClientProvider(clientProvider);
         });
@@ -58,14 +63,22 @@ public class SocketD {
         ServiceLoader.load(ServerProvider.class).iterator().forEachRemaining(serverProvider -> {
             registerServerProvider(serverProvider);
         });
+
+        ProviderUtils.autoWeakLoad();
     }
 
+    /**
+     * 手动注册客户端提供者
+     */
     public static void registerClientProvider(ClientProvider clientProvider) {
         for (String s : clientProvider.schemas()) {
             clientProviderMap.put(s, clientProvider);
         }
     }
 
+    /**
+     * 手动注册服务端提供者
+     */
     public static void registerServerProvider(ServerProvider serverProvider) {
         for (String s : serverProvider.schemas()) {
             serverProviderMap.put(s, serverProvider);

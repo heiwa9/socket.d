@@ -72,7 +72,7 @@ export abstract class BrokerListenerBase {
      * @param atName 目标名字
      * @since 2.3
      */
-    getPlayerAny(atName: string, requester?: Session, message?:Message): Session | null {
+    getPlayerAny(atName: string, requester?: Session|null, message?:Message): Session | null {
         if (!atName) {
             return null;
         }
@@ -82,7 +82,7 @@ export abstract class BrokerListenerBase {
             let x_hash: string | null = null;
 
             if (message != null) {
-                x_hash = message.meta(EntityMetas.META_X_Hash);
+                x_hash = message.meta(EntityMetas.META_X_HASH);
             }
 
             if (!x_hash) {

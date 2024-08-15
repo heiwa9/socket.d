@@ -1,5 +1,9 @@
 package org.noear.socketd.transport.core;
 
+import org.noear.socketd.transport.stream.StreamInternal;
+
+import java.io.IOException;
+
 /**
  * 协议处理器
  *
@@ -13,9 +17,36 @@ public interface Processor {
     void setListener(Listener listener);
 
     /**
-     * 接收处理
+     * 发送帧
+     *
+     * @param channel          通道
+     * @param frame            帧
+     * @param channelAssistant 通道助理
+     * @param target           发送目标
      */
-    void onReceive(ChannelInternal channel, Frame frame);
+    <S> void sendFrame(ChannelInternal channel, Frame frame, ChannelAssistant<S> channelAssistant, S target) throws IOException;
+
+
+    /**
+     * 接收帧
+     *
+     * @param channel 通道
+     * @param frame   帧
+     */
+    void reveFrame(ChannelInternal channel, Frame frame);
+
+    /**
+     * 接收帧
+     *
+     * @param channel 通道
+     * @param frame   帧
+     * @deprecated 2.5
+     */
+    @Deprecated
+    default void onReceive(ChannelInternal channel, Frame frame){
+        reveFrame(channel, frame);
+    }
+
 
     /**
      * 打开时
@@ -28,9 +59,19 @@ public interface Processor {
      * 收到消息时
      *
      * @param channel 通道
-     * @param message 消息
+     * @param frame   帧
      */
-    void onMessage(ChannelInternal channel, Message message);
+    void onMessage(ChannelInternal channel, Frame frame);
+
+    /**
+     * 收到签复时
+     *
+     * @param channel 通道
+     * @param frame   帧
+     * @param stream  流
+     */
+    void onReply(ChannelInternal channel, Frame frame, StreamInternal stream);
+
 
     /**
      * 关闭时

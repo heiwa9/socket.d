@@ -25,7 +25,10 @@ public interface Config {
 
     /**
      * 是否无锁发送
+     *
+     * @deprecated 2.5
      */
+    @Deprecated
     boolean isNolockSend();
 
     /**
@@ -79,14 +82,34 @@ public interface Config {
     int getCodecThreads();
 
     /**
-     * 交换线程数
+     * 工作线程数
      */
-    int getExchangeThreads();
+    int getWorkThreads();
+
+    /**
+     * 工作执行器
+     */
+    ExecutorService getWorkExecutor();
+
+    /**
+     * 交换线程数
+     *
+     * @deprecated 2.4
+     */
+    @Deprecated
+    default int getExchangeThreads() {
+        return getWorkThreads();
+    }
 
     /**
      * 交换执行器
+     *
+     * @deprecated 2.4
      */
-    ExecutorService getExchangeExecutor();
+    @Deprecated
+    default ExecutorService getExchangeExecutor() {
+        return getWorkExecutor();
+    }
 
     /**
      * 获取读缓冲大小
@@ -117,4 +140,24 @@ public interface Config {
      * 允许最大UDP包大小
      */
     int getMaxUdpSize();
+
+    /**
+     * 使用最大内存限制
+     */
+    boolean useMaxMemoryLimit();
+
+    /**
+     * 允许最大内存使用比例（0.x->1.0）
+     */
+    float getMaxMemoryRatio();
+
+    /**
+     * 流量限制器
+     */
+    TrafficLimiter getTrafficLimiter();
+
+    /**
+     * 是否使用子协议
+     */
+    boolean isUseSubprotocols();
 }

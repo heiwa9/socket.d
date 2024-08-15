@@ -12,7 +12,7 @@ import {
 import type {IoConsumer} from "../transport/core/Typealias";
 import {ClientHandshakeResult} from "../transport/client/ClientHandshakeResult";
 import {EnvBridge} from "./impl/EnvBridge";
-import {ChannelDefault} from "../transport/core/ChannelDefault";
+import {ChannelDefault} from "../transport/core/impl/ChannelDefault";
 import {Flags} from "../transport/core/Flags";
 import {SocketDConnectionException} from "../exception/SocketDException";
 
@@ -63,7 +63,7 @@ export class WebSocketClientImpl implements SdWebSocketListener {
 
     constructor(url: string, client: WsClient, handshakeFuture: IoConsumer<ClientHandshakeResult>) {
         try {
-            this._real = EnvBridge.createSdWebSocketClient(url, this);
+            this._real = EnvBridge.createSdWebSocketClient(url, client.getConfig(), this);
         } catch (err) {
             //首次连接有可能会失败
             handshakeFuture(new ClientHandshakeResult(null, err));
@@ -95,7 +95,7 @@ export class WebSocketClientImpl implements SdWebSocketListener {
                         });
                     }
 
-                    this._client.getProcessor().onReceive(this._channel, frame);
+                    this._client.getProcessor().reveFrame(this._channel, frame);
                 }
             } catch (e) {
                 if (e instanceof SocketDConnectionException) {

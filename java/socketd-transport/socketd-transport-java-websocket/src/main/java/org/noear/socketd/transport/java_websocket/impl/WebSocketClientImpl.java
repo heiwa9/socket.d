@@ -2,8 +2,11 @@ package org.noear.socketd.transport.java_websocket.impl;
 
 import org.java_websocket.WebSocket;
 import org.java_websocket.client.WebSocketClient;
+import org.java_websocket.drafts.Draft_6455;
 import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ServerHandshake;
+import org.java_websocket.protocols.Protocol;
+import org.noear.socketd.SocketD;
 import org.noear.socketd.exception.SocketDConnectionException;
 import org.noear.socketd.transport.client.ClientHandshakeResult;
 import org.noear.socketd.transport.core.ChannelInternal;
@@ -16,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 
 public class WebSocketClientImpl extends WebSocketClient {
@@ -25,7 +29,10 @@ public class WebSocketClientImpl extends WebSocketClient {
     private CompletableFuture<ClientHandshakeResult> handshakeFuture;
 
     public WebSocketClientImpl(URI serverUri, WsNioClient client) {
-        super(serverUri);
+        super(serverUri, client.getConfig().isUseSubprotocols() ?
+                new Draft_6455(Collections.emptyList(), Collections.singletonList(new Protocol(SocketD.protocolName()))) :
+                new Draft_6455());
+
         this.client = client;
         this.channel = new ChannelDefault<>(this, client);
     }
@@ -33,6 +40,7 @@ public class WebSocketClientImpl extends WebSocketClient {
     public CompletableFuture<ClientHandshakeResult> getHandshakeFuture() {
         return handshakeFuture;
     }
+
 
     @Override
     public void onWebsocketPing(WebSocket conn, Framedata f) {
@@ -87,7 +95,7 @@ public class WebSocketClientImpl extends WebSocketClient {
                     });
                 }
 
-                client.getProcessor().onReceive(channel, frame);
+                client.getProcessor().reveFrame(channel, frame);
             }
         } catch (Exception e) {
             if (e instanceof SocketDConnectionException) {

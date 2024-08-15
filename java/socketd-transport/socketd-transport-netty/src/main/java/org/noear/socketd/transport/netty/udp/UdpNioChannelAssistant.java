@@ -1,12 +1,14 @@
 package org.noear.socketd.transport.netty.udp;
 
 import io.netty.buffer.ByteBuf;
+import org.noear.socketd.transport.core.ChannelInternal;
 import org.noear.socketd.transport.core.codec.ByteBufferCodecReader;
 import org.noear.socketd.transport.core.codec.ByteBufferCodecWriter;
 import org.noear.socketd.transport.netty.udp.impl.DatagramTagert;
 import org.noear.socketd.transport.core.ChannelAssistant;
 import org.noear.socketd.transport.core.Config;
 import org.noear.socketd.transport.core.Frame;
+import org.noear.socketd.utils.IoCompletionHandler;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -24,10 +26,15 @@ public class UdpNioChannelAssistant implements ChannelAssistant<DatagramTagert> 
         this.config = config;
     }
     @Override
-    public void write(DatagramTagert target, Frame frame) throws IOException {
-        ByteBufferCodecWriter writer = config.getCodec().write(frame, i -> new ByteBufferCodecWriter(ByteBuffer.allocate(i)));
+    public void write(DatagramTagert target, Frame frame, ChannelInternal channel, IoCompletionHandler completionHandler) {
+        try {
+            ByteBufferCodecWriter writer = config.getCodec().write(frame, i -> new ByteBufferCodecWriter(ByteBuffer.allocate(i)));
+            target.send(writer.getBuffer().array());
 
-        target.send(writer.getBuffer().array());
+            completionHandler.completed(true, null);
+        } catch (Throwable e) {
+            completionHandler.completed(false, e);
+        }
     }
 
     public Frame read(ByteBuf inBuf) throws Exception {

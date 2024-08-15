@@ -2,9 +2,12 @@ package org.noear.socketd.transport.java_websocket.impl;
 
 import org.java_websocket.WebSocket;
 import org.java_websocket.WebSocketImpl;
+import org.java_websocket.drafts.Draft_6455;
 import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ClientHandshake;
+import org.java_websocket.protocols.Protocol;
 import org.java_websocket.server.WebSocketServer;
+import org.noear.socketd.SocketD;
 import org.noear.socketd.transport.core.ChannelInternal;
 import org.noear.socketd.transport.java_websocket.WsNioServer;
 import org.noear.socketd.transport.core.Frame;
@@ -14,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.*;
 
 /**
  * @author noear
@@ -21,16 +25,28 @@ import java.nio.ByteBuffer;
  */
 public class WebSocketServerImpl extends WebSocketServer {
     static final Logger log = LoggerFactory.getLogger(WebSocketServerImpl.class);
+    public static final String WS_HANDSHAKE_HEADER = "ws-handshake-headers";
 
     private WsNioServer server;
 
     public WebSocketServerImpl(int port, WsNioServer server) {
-        super(new InetSocketAddress(port), server.getConfig().getCodecThreads());
+        super(new InetSocketAddress(port),
+                server.getConfig().getCodecThreads(),
+                server.getConfig().isUseSubprotocols() ?
+                        Collections.singletonList(new Draft_6455(Collections.emptyList(), Arrays.asList(new Protocol(SocketD.protocolName())))) :
+                        //支持有子协议，或没子协议
+                        Collections.singletonList(new Draft_6455(Collections.emptyList(), Arrays.asList(new Protocol(SocketD.protocolName()), new Protocol("")))));
+
         this.server = server;
     }
 
     public WebSocketServerImpl(String addr, int port, WsNioServer server) {
-        super(new InetSocketAddress(addr, port), server.getConfig().getCodecThreads());
+        super(new InetSocketAddress(addr, port),
+                server.getConfig().getCodecThreads(),
+                server.getConfig().isUseSubprotocols() ?
+                        Collections.singletonList(new Draft_6455(Collections.emptyList(), Collections.singletonList(new Protocol(SocketD.protocolName())))) :
+                        null);
+
         this.server = server;
     }
 
@@ -50,7 +66,19 @@ public class WebSocketServerImpl extends WebSocketServer {
 
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        conn.setAttachment(new ChannelDefault<>(conn, server));
+        ChannelDefault channel = new ChannelDefault<>(conn, server);
+        conn.setAttachment(channel);
+
+        //头信息
+        Map<String, String> headerMap = new HashMap<>();
+
+        Iterator<String> httpFields = handshake.iterateHttpFields();
+        while (httpFields.hasNext()) {
+            String name = httpFields.next();
+            headerMap.put(name, handshake.getFieldValue(name));
+        }
+
+        channel.getSession().attrPut(WS_HANDSHAKE_HEADER, headerMap);
     }
 
     @Override
@@ -81,7 +109,7 @@ public class WebSocketServerImpl extends WebSocketServer {
             Frame frame = server.getAssistant().read(message);
 
             if (frame != null) {
-                server.getProcessor().onReceive(channel, frame);
+                server.getProcessor().reveFrame(channel, frame);
             }
         } catch (Throwable e) {
             log.warn("WebSocket server onMessage error", e);

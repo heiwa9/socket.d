@@ -29,8 +29,8 @@ public class TcpNioServer extends ServerBase<TcpNioChannelAssistant> implements 
     private static final Logger log = LoggerFactory.getLogger(TcpNioServer.class);
     private ChannelFuture server;
 
-    private EventLoopGroup bossGroup;
-    private EventLoopGroup workGroup;
+    private NioEventLoopGroup bossGroup;
+    private NioEventLoopGroup workGroup;
 
     public TcpNioServer(ServerConfig config) {
         super(config, new TcpNioChannelAssistant());
@@ -58,6 +58,8 @@ public class TcpNioServer extends ServerBase<TcpNioChannelAssistant> implements 
 
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(bossGroup, workGroup)
+                    .childOption(ChannelOption.SO_RCVBUF, getConfig().getReadBufferSize())
+                    .childOption(ChannelOption.SO_SNDBUF, getConfig().getWriteBufferSize())
                     .channel(NioServerSocketChannel.class)
                     .childHandler(channelHandler);
 

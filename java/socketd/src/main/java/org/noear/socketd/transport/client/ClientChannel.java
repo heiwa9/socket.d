@@ -93,7 +93,7 @@ public class ClientChannel extends ChannelBase implements Channel {
                 }
 
                 //可能是被内层的会话关闭的，跳过了外层
-                this.close(real.isClosed());
+                this.close(real.closeCode());
                 return;
             }
 
@@ -143,11 +143,11 @@ public class ClientChannel extends ChannelBase implements Channel {
      * 是否已关闭
      */
     @Override
-    public int isClosed() {
+    public int closeCode() {
         if (real == null) {
             return 0;
         } else {
-            return real.isClosed();
+            return real.closeCode();
         }
     }
 
@@ -213,18 +213,6 @@ public class ClientChannel extends ChannelBase implements Channel {
             throw new SocketDChannelException("Client channel send failed", e);
         }
     }
-
-    /**
-     * 接收（接收答复帧）
-     *
-     * @param frame  帧
-     * @param stream 流
-     */
-    @Override
-    public void retrieve(Frame frame, StreamInternal stream) {
-        real.retrieve(frame, stream);
-    }
-
 
     /**
      * 出错时

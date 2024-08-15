@@ -68,8 +68,9 @@ public class TcpBioServer extends ServerBase<TcpBioChannelAssistant> implements 
             isStarted = true;
         }
 
-        serverExecutor = Executors.newFixedThreadPool(getConfig().getExchangeThreads());
+        serverExecutor = Executors.newFixedThreadPool(getConfig().getWorkThreads());
         server = createServer();
+        server.setReuseAddress(true);
 
         serverExecutor.submit(this::accept);
 
@@ -144,7 +145,7 @@ public class TcpBioServer extends ServerBase<TcpBioChannelAssistant> implements 
 
                     Frame frame = getAssistant().read(socket);
                     if (frame != null) {
-                        getProcessor().onReceive(channel, frame);
+                        getProcessor().reveFrame(channel, frame);
                     } else {
                         //休息10ms（避免cpu过高）
                         Thread.sleep(10);

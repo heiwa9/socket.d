@@ -6,7 +6,6 @@ import org.noear.socketd.transport.client.ClientHandshakeResult;
 import org.noear.socketd.transport.core.ChannelInternal;
 import org.noear.socketd.transport.core.Frame;
 import org.noear.socketd.transport.smartsocket.tcp.impl.ClientMessageProcessor;
-import org.noear.socketd.utils.RunUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.smartboot.socket.extension.plugins.IdleStatePlugin;
@@ -25,8 +24,8 @@ import java.util.concurrent.TimeoutException;
  */
 public class TcpAioClientConnector extends ClientConnectorBase<TcpAioClient> {
     private static final Logger log = LoggerFactory.getLogger(TcpAioClientConnector.class);
-
     private AioQuickClient real;
+    private Thread connectThread;
 
     public TcpAioClientConnector(TcpAioClient client) {
         super(client);
@@ -40,13 +39,14 @@ public class TcpAioClientConnector extends ClientConnectorBase<TcpAioClient> {
         ClientMessageProcessor messageProcessor = new ClientMessageProcessor(client);
 
 
-        RunUtils.async(() -> {
+        connectThread = new Thread(() -> {
             try {
                 connectDo(messageProcessor);
             } catch (Throwable e) {
                 messageProcessor.getHandshakeFuture().complete(new ClientHandshakeResult(null, e));
             }
         });
+        connectThread.start();
 
         try {
             //等待握手结果
@@ -86,7 +86,6 @@ public class TcpAioClientConnector extends ClientConnectorBase<TcpAioClient> {
             messageProcessor.addPlugin(new IdleStatePlugin<>((int) client.getConfig().getIdleTimeout(), true, false));
         }
 
-
         real = new AioQuickClient(client.getConfig().getHost(), client.getConfig().getPort(), client.frameProtocol(), messageProcessor);
 
         if (client.getConfig().getReadBufferSize() > 0) {
@@ -109,6 +108,10 @@ public class TcpAioClientConnector extends ClientConnectorBase<TcpAioClient> {
         try {
             if (real != null) {
                 real.shutdown();
+            }
+
+            if (connectThread != null) {
+                connectThread.interrupt();
             }
         } catch (Throwable e) {
             if (log.isDebugEnabled()) {

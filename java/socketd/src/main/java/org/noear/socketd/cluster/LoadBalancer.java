@@ -1,6 +1,7 @@
 package org.noear.socketd.cluster;
 
 import org.noear.socketd.transport.client.ClientSession;
+import org.noear.socketd.utils.SessionUtils;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -51,7 +52,7 @@ public class LoadBalancer {
             //查找可用的会话
             List<T> sessions = new ArrayList<>();
             for (T s : coll) {
-                if (s.isValid() && !s.isClosing()) {
+                if (SessionUtils.isActive(s)) {
                     sessions.add(s);
                 }
             }
@@ -80,7 +81,7 @@ public class LoadBalancer {
         } else {
             //查找可用的会话
             for (T s : coll) {
-                if (s.isValid() && !s.isClosing()) {
+                if (SessionUtils.isActive(s)) {
                     return s;
                 }
             }

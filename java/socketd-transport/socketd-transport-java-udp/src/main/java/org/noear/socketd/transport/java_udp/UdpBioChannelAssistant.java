@@ -1,12 +1,14 @@
 package org.noear.socketd.transport.java_udp;
 
 import org.noear.socketd.transport.core.ChannelAssistant;
+import org.noear.socketd.transport.core.ChannelInternal;
 import org.noear.socketd.transport.core.Config;
 import org.noear.socketd.transport.core.Frame;
 import org.noear.socketd.transport.core.codec.ByteBufferCodecReader;
 import org.noear.socketd.transport.core.codec.ByteBufferCodecWriter;
 import org.noear.socketd.transport.java_udp.impl.DatagramFrame;
 import org.noear.socketd.transport.java_udp.impl.DatagramTagert;
+import org.noear.socketd.utils.IoCompletionHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,9 +64,15 @@ public class UdpBioChannelAssistant implements ChannelAssistant<DatagramTagert> 
      * 写入
      */
     @Override
-    public void write(DatagramTagert target, Frame frame) throws IOException {
-        ByteBufferCodecWriter writer= config.getCodec().write(frame, i-> new ByteBufferCodecWriter(ByteBuffer.allocate(i)));
-        target.send(writer.getBuffer().array());
+    public void write(DatagramTagert target, Frame frame, ChannelInternal channel, IoCompletionHandler completionHandler) {
+        try {
+            ByteBufferCodecWriter writer = config.getCodec().write(frame, i -> new ByteBufferCodecWriter(ByteBuffer.allocate(i)));
+            target.send(writer.getBuffer().array());
+
+            completionHandler.completed(true, null);
+        } catch (Throwable e) {
+            completionHandler.completed(false, e);
+        }
     }
 
     @Override

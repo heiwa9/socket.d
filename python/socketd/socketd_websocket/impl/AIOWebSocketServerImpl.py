@@ -1,12 +1,11 @@
 from __future__ import annotations
 import asyncio
-import traceback
-from typing import Optional, Union
+from typing import Optional, Union, Sequence
 
-from websockets import ConnectionClosedOK
-from websockets.frames import Opcode
+from websockets import ConnectionClosedOK, ConnectionClosedError, Subprotocol, Headers, InvalidOrigin
 from websockets.server import WebSocketServer, WebSocketServerProtocol
 
+from socketd import SocketD
 from socketd.transport.core.Channel import Channel
 from socketd.transport.core.ChannelInternal import ChannelInternal
 from socketd.utils.LogConfig import log
@@ -17,7 +16,7 @@ from socketd.transport.core.Frame import Frame
 
 class AIOWebSocketServerImpl(WebSocketServerProtocol):
 
-    def __init__(self, ws_handler, ws_server: WebSocketServer, ws_aio_server: 'WsAioServer',
+    def __init__(self, ws_server: WebSocketServer, ws_aio_server: 'WsAioServer',
                  *args, **kwargs):
         self.ws_aio_server = ws_aio_server
         self.__ws_server: WebSocketServer = ws_server
@@ -27,6 +26,23 @@ class AIOWebSocketServerImpl(WebSocketServerProtocol):
                                          ws_server=self.__ws_server,
                                          *args,
                                          **kwargs)
+
+    def process_subprotocol(self, headers: Headers, available_subprotocols: Optional[Sequence[Subprotocol]]) \
+            -> Optional[Subprotocol]:
+        header_values = headers.get_all("Sec-WebSocket-Protocol")
+
+        if self.ws_aio_server.get_config().is_use_subprotocols():
+            # 开启子协议验证的时候，如果不匹配则拒绝握手
+            if bool(header_values) and header_values.__contains__(SocketD.protocol_name()):
+                return Subprotocol(SocketD.protocol_name())
+            else:
+                raise InvalidOrigin("No subprotocols supported")
+        else:
+            if bool(header_values) and header_values.__contains__(SocketD.protocol_name()):
+                return Subprotocol(SocketD.protocol_name())
+
+        return super().process_subprotocol(headers, available_subprotocols)
+
 
     def set_attachment(self, obj: ChannelInternal):
         self.__attachment = obj
@@ -39,12 +55,10 @@ class AIOWebSocketServerImpl(WebSocketServerProtocol):
         super().connection_open()
         self.on_open(self)
 
-    async def read_frame(self, max_size: Optional[int]) -> Frame:
-        frame = await super().read_frame(max_size)
-        if frame is not None:
-            if frame.opcode == Opcode.PONG:
-                await self.assert_handshake()
-        return frame
+    async def keepalive_ping(self) -> None:
+        await asyncio.sleep(self.ping_interval)
+        if await self.assert_handshake():
+            return await super().keepalive_ping()
 
     def on_open(self, conn) -> None:
         """create_protocol"""
@@ -52,15 +66,18 @@ class AIOWebSocketServerImpl(WebSocketServerProtocol):
             channel = ChannelDefault(conn, self.ws_aio_server)
             self.set_attachment(channel)
 
-    async def on_error(self, conn: Union[AIOWebSocketServerImpl, WebSocketServerProtocol], ex: Exception):
-        try:
-            channel: ChannelInternal = conn.get_attachment()
-            if channel is not None:
-                # 有可能未 onOpen，就 onError 了；此时通道未成
-                self.ws_aio_server.get_processor().on_error(channel, ex)
-        except Exception as e:
-            e_msg = traceback.format_exc()
-            log.warning(e_msg)
+    def on_close(self, conn) -> None:
+        channel: ChannelInternal = conn.get_attachment()
+        if channel is not None:
+            # 有可能未 onOpen，就 onClose 了；此时通道未成
+            self.ws_aio_server.get_processor().on_close(channel)
+
+
+    def on_error(self, conn: Union[AIOWebSocketServerImpl, WebSocketServerProtocol], ex: Exception):
+        channel: ChannelInternal = conn.get_attachment()
+        if channel is not None:
+            # 有可能未 onOpen，就 onError 了；此时通道未成
+            self.ws_aio_server.get_processor().on_error(channel, ex)
 
     async def on_message(self, conn: Union[AIOWebSocketServerImpl, WebSocketServerProtocol], path: str):
         """ws_handler"""
@@ -82,7 +99,7 @@ class AIOWebSocketServerImpl(WebSocketServerProtocol):
                 if frame is not None:
                     # 不等待直接运行
                     tasks.append(
-                        loop.create_task(self.ws_aio_server.get_processor().on_receive(self.get_attachment(), frame)))
+                        loop.create_task(self.ws_aio_server.get_processor().reve_frame(self.get_attachment(), frame)))
                     if frame.flag() == Flags.Close:
                         # 不需要再 while(true) 了 //其它处理在 processor
                         break
@@ -91,9 +108,11 @@ class AIOWebSocketServerImpl(WebSocketServerProtocol):
             except asyncio.CancelledError as e:
                 break
             except ConnectionClosedOK as e:
-                break
+                self.on_close(conn)
+            except ConnectionClosedError as e:
+                self.on_close(conn)
             except Exception as e:
-                await self.on_error(conn, e)
+                self.on_error(conn, e)
 
     # 未签名前，禁止 ping/pong
     async def assert_handshake(self) -> bool:

@@ -25,6 +25,24 @@ public interface Listener {
     void onMessage(Session session, Message message) throws IOException;
 
     /**
+     * 收到答复时
+     *
+     * @param session 会话
+     * @param message 消息
+     */
+    default void onReply(Session session, Message message) {
+    }
+
+    /**
+     * 发送消息时
+     *
+     * @param session 会话
+     * @param message 消息
+     */
+    default void onSend(Session session, Message message) {
+    }
+
+    /**
      * 关闭时
      *
      * @param session 会话

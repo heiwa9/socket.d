@@ -2,6 +2,7 @@ import traceback
 from typing import Optional
 
 from socketd.transport.core.entity.MessageBuilder import MessageBuilder
+from socketd.transport.core.entity.StringEntity import StringEntity
 from socketd.transport.core.impl.SessionBase import SessionBase
 from socketd.transport.core.Channel import Channel
 from socketd.transport.core.HandshakeDefault import HandshakeDefault
@@ -53,20 +54,28 @@ class SessionDefault(SessionBase):
         RunUtils.taskTry(self._channel.send(Frame(Flags.Message, message), stream))
         return stream
 
-    def send_and_request(self, event: str, content: Entity,
-                               timeout: int|None = 100) -> RequestStream:
-
+    def send_and_request(self, event: str, content: Entity, timeout: float|None = 0) -> RequestStream:
         if timeout is None:
-            timeout = 100
+            timeout = 0
 
-        if timeout < 100:
-            timeout = self._channel.get_config().get_request_timeout() / 1000
+        if timeout < 0:
+            timeout = self._channel.get_config().get_stream_timeout()
+
+        if timeout == 0:
+            timeout = self._channel.get_config().get_request_timeout()
+
         message = MessageBuilder().sid(self.generate_id()).event(event).entity(content).build()
         stream:RequestStream = RequestStreamImpl(message.sid(), timeout)
         RunUtils.taskTry(self._channel.send(Frame(Flags.Request, message), stream))
         return stream
 
-    def send_and_subscribe(self, event: str, content: Entity, timeout: int = 0):
+    def send_and_subscribe(self, event: str, content: Entity, timeout: float = 0):
+        if timeout is None:
+            timeout = 0
+
+        if timeout <= 0:
+            timeout = self._channel.get_config().get_stream_timeout()
+
         message = MessageBuilder().sid(self.generate_id()).event(event).entity(content).build()
         stream:SubscribeStream = SubscribeStreamImpl(message.sid(), timeout)
         RunUtils.taskTry(self._channel.send(Frame(Flags.Subscribe, message), stream))
@@ -114,7 +123,13 @@ class SessionDefault(SessionBase):
     def param_or_default(self, name: str, defVal: str) -> str:
         return self.handshake().param_or_default(name, defVal)
 
-    async def send_alarm(self, _from: Message, alarm: str) -> None:
-        await self._channel.send_alarm(_from, alarm)
+    async def send_alarm(self, _from: Message, alarm: str|Entity) -> None:
+        if isinstance(alarm, str):
+            await self._channel.send_alarm(_from, StringEntity(alarm))
+        else:
+            await self._channel.send_alarm(_from, alarm)
+
+    async def send_pressure(self, _from: Message, pressure: Entity) -> None:
+        await self._channel.send_pressure(_from, pressure)
 
 

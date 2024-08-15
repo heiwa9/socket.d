@@ -18,8 +18,13 @@ public interface ChannelInternal extends Channel {
 
     /**
      * 更新最后活动时间
-     * */
+     */
     void setLiveTimeAsNow();
+
+    /**
+     * 更新告警代码
+     * */
+    void setAlarmCode(int alarmCode);
 
     /**
      * 获取流

@@ -1,6 +1,7 @@
 package org.noear.socketd.transport.core.impl;
 
 import org.noear.socketd.transport.core.Channel;
+import org.noear.socketd.transport.core.Config;
 import org.noear.socketd.transport.core.Session;
 
 import java.util.Map;
@@ -89,14 +90,40 @@ public abstract class SessionBase implements Session {
         return this;
     }
 
+    /**
+     * 删除附件
+     */
+    @Override
+    public <T> Session attrDel(String name) {
+        if (attrMap != null) {
+            attrMap.remove(name);
+        }
+        return this;
+    }
+
+    @Override
+    public Config config() {
+        return channel.getConfig();
+    }
+
     @Override
     public String sessionId() {
         return sessionId;
     }
 
     @Override
+    public boolean isActive() {
+        return isValid() && isClosing() == false;
+    }
+
+    @Override
     public long liveTime() {
         return channel.getLiveTime();
+    }
+
+    @Override
+    public int closeCode() {
+        return channel.closeCode();
     }
 
     protected String generateId() {

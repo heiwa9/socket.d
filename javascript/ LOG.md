@@ -1,3 +1,36 @@
+### 2.5.10
+* 添加 websocket 子协议验证开关控制
+
+### 2.5.6
+* 强化 EntityDefault::dataSet 方法，支持 Buffer 传入
+* 强化 Session::sendAlarm 支持 Entity 传入
+
+### 2.5.5
+* 修复 wechat 的环境识别问题
+
+### 2.5.4
+* 添加 Listener:onReply, onSend 方法，方便帧流量统计
+* 添加 FrameIoHandler 接口，强化 Processor 的帧输入输出强控地位
+* 调整 代码结构与 java,python 尽量保持相近
+
+### 2.5.3
+* 修复 在 ios/android 上检测 TextEncoder 出错的问题（2.3.10 出现的）
+
+### 2.5.2
+* 添加 SessionUtils 工具类
+* 添加 Session::isActive()
+* 添加 BroadcastBroker 接口（提供类似 stomp 的体验）
+
+### 2.5.0
+* 添加 websocket 适配子协议验证（避免乱连）
+
+### 2.4.17
+* 添加 EntityMetas.META_X_UNLIMITED
+
+### 2.4.15
+* 添加 提供者手动注册接口
+* 优化 SocketD.newEntity 与小程序的兼容性（小程不支持 File、Blob 类型）
+
 ### 2.4.12
 * 调整 Processor:onError 添加 try-catch 处理
 

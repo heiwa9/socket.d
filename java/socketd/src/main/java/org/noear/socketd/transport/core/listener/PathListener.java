@@ -1,8 +1,6 @@
 package org.noear.socketd.transport.core.listener;
 
-import org.noear.socketd.transport.core.Listener;
-import org.noear.socketd.transport.core.Message;
-import org.noear.socketd.transport.core.Session;
+import org.noear.socketd.transport.core.*;
 
 import java.io.IOException;
 
@@ -74,6 +72,36 @@ public class PathListener implements Listener {
 
         if (l1 != null) {
             l1.onMessage(session, message);
+        }
+    }
+
+    /**
+     * 收到答复时
+     *
+     * @param session 会话
+     * @param message 消息
+     */
+    @Override
+    public void onReply(Session session, Message message) {
+        Listener l1 = pathRouteSelector.select(session.path());
+
+        if (l1 != null) {
+            l1.onReply(session, message);
+        }
+    }
+
+    /**
+     * 发送消息时
+     *
+     * @param session 会话
+     * @param message 消息
+     */
+    @Override
+    public void onSend(Session session, Message message) {
+        Listener l1 = pathRouteSelector.select(session.path());
+
+        if (l1 != null) {
+            l1.onSend(session, message);
         }
     }
 

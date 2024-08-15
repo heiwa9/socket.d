@@ -42,6 +42,8 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
     private BiConsumer<Boolean, Throwable> onOpenFuture;
     //关闭代号（用于做关闭异常提醒）//可能协议关；可能用户关
     private int closeCode;
+    //告警代号
+    private int alarmCode;
 
     public ChannelDefault(S source, ChannelSupporter<S> supporter) {
         super(supporter.getConfig());
@@ -58,7 +60,7 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
      */
     @Override
     public boolean isValid() {
-        return isClosed() == 0 && assistant.isValid(source);
+        return closeCode() == 0 && assistant.isValid(source);
     }
 
     @Override
@@ -67,7 +69,7 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
     }
 
     @Override
-    public int isClosed() {
+    public int closeCode() {
         if (closeCode > Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING) {
             return closeCode;
         } else {
@@ -83,6 +85,11 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
     @Override
     public void setLiveTimeAsNow() {
         liveTime = System.currentTimeMillis();
+    }
+
+    @Override
+    public void setAlarmCode(int alarmCode) {
+        this.alarmCode = alarmCode;
     }
 
     /**
@@ -117,36 +124,47 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
             }
         }
 
-        //
-        //如果是单线程语言的，只需要使用无锁发送
-        //
+        //是否串行发送
+        boolean isSerialSend = getConfig().isSerialSend();
 
-        if (getConfig().isNolockSend()) {
-            //无锁发送
-            sendDo(frame, stream);
+        if (isSerialSend) {
+            //公平锁
+            sendInFairLock.lock();
+            try {
+                sendDo(frame, stream);
+            } finally {
+                sendInFairLock.unlock();
+            }
         } else {
-            //有锁发送 //如果有数据分片场景必须要有锁！
-            boolean isSerialSend = getConfig().isSerialSend();
-
-            if (isSerialSend) {
-                sendInFairLock.lock();
-                try {
-                    sendDo(frame, stream);
-                } finally {
-                    sendInFairLock.unlock();
-                }
-            } else {
-                sendNoFairLock.lock();
-                try {
-                    sendDo(frame, stream);
-                } finally {
-                    sendNoFairLock.unlock();
-                }
+            //非公平锁
+            sendNoFairLock.lock();
+            try {
+                sendDo(frame, stream);
+            } finally {
+                sendNoFairLock.unlock();
             }
         }
     }
 
     private void sendDo(Frame frame, StreamInternal stream) throws IOException {
+        if(alarmCode == Constants.ALARM3001_PRESSURE) {
+            if (frame.flag() >= Flags.Message && frame.flag() <= Flags.Subscribe) {
+                if (frame.message().meta(EntityMetas.META_X_UNLIMITED) == null) {
+                    try {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Too much pressure, sleep=100ms");
+                        }
+
+                        setAlarmCode(0);
+                        Thread.sleep(100);
+                    } catch (Throwable ex) {
+                        //略过
+                    }
+                }
+            }
+        }
+
+
         if (frame.message() != null) {
             MessageInternal message = frame.message();
 
@@ -177,49 +195,19 @@ public class ChannelDefault<S> extends ChannelBase implements ChannelInternal {
                                 .build());
                     }
 
-                    assistant.write(source, fragmentFrame);
+                    processor.sendFrame(this, fragmentFrame, assistant, source);
                 });
                 return;
             }
         }
 
         //不满足分片条件，直接发
-        assistant.write(source, frame);
+        processor.sendFrame(this, frame, assistant, source);
         if (stream != null) {
             stream.onProgress(true, 1, 1);
         }
     }
 
-
-    /**
-     * 接收（接收答复帧）
-     *
-     * @param frame 帧
-     */
-    @Override
-    public void retrieve(Frame frame, StreamInternal stream) {
-        if (stream != null) {
-            if (stream.demands() < Constants.DEMANDS_MULTIPLE || frame.flag() == Flags.ReplyEnd) {
-                //如果是单收或者答复结束，则移除流接收器
-                streamManger.removeStream(frame.message().sid());
-            }
-
-            if (stream.demands() < Constants.DEMANDS_MULTIPLE) {
-                //单收时，内部已经是异步机制
-                stream.onReply(frame.message());
-            } else {
-                //改为异步处理，避免卡死Io线程
-                getConfig().getExchangeExecutor().submit(() -> {
-                    stream.onReply(frame.message());
-                });
-            }
-        } else {
-            if (log.isDebugEnabled()) {
-                log.debug("{} stream not found, sid={}, sessionId={}",
-                        getConfig().getRoleName(), frame.message().sid(), getSession().sessionId());
-            }
-        }
-    }
 
     /**
      * 手动重连（一般是自动）

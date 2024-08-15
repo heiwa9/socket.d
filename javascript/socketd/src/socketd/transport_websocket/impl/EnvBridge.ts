@@ -3,6 +3,7 @@ import {SdWebSocketBrowserClient} from "./SdWebSocketBrowserClient";
 import {SdWebSocketNodeJsClient} from "./SdWebSocketNodeJsClient";
 import {SdWebSocketUniappClient} from "./SdWebSocketUniappClient";
 import {SdWebSocketWeixinClient} from "./SdWebSocketWeixinClient";
+import {Config} from "../../transport/core/Config";
 
 export enum Runtime {
     Unknown = 0,
@@ -36,26 +37,32 @@ export class EnvBridge {
                 //如果有 Uniapp，优先 Uniapp 接口
                 return Runtime.Uniapp;
             } else {
-                return Runtime.Unknown;
+                // @ts-ignore
+                if (typeof wx != 'undefined' && wx.connectSocket && wx.request) {
+                    //如果是 Weixin 接口
+                    return Runtime.Weixin;
+                } else {
+                    return Runtime.Unknown;
+                }
             }
         }
     }
 
-    static createSdWebSocketClient(url: string, connector: SdWebSocketListener) {
+    static createSdWebSocketClient(url: string, config:Config, listener: SdWebSocketListener) {
         let runtime = this.getRuntime();
 
         if (runtime == Runtime.Weixin) {
-            console.info("Client channel use xeixin api!");
-            return new SdWebSocketWeixinClient(url, connector);
+            console.info("Client channel use wechat api!");
+            return new SdWebSocketWeixinClient(url, config, listener);
         } else if (runtime == Runtime.Uniapp) {
             console.info("Client channel use uniapp api!");
-            return new SdWebSocketUniappClient(url, connector);
+            return new SdWebSocketUniappClient(url, config, listener);
         } else if (runtime == Runtime.NodeJs) {
             console.info("Client channel use nodejs api");
-            return new SdWebSocketNodeJsClient(url, connector);
+            return new SdWebSocketNodeJsClient(url, config, listener);
         } else {
             console.info("Client channel use browser api");
-            return new SdWebSocketBrowserClient(url, connector);
+            return new SdWebSocketBrowserClient(url, config, listener);
         }
     }
 }

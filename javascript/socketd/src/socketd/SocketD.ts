@@ -4,8 +4,6 @@ import {Asserts} from "./transport/core/Asserts";
 import {ClientConfig} from "./transport/client/ClientConfig";
 import {ClusterClient} from "./cluster/ClusterClient";
 import {WsProvider} from "./transport_websocket/WsProvider";
-import {EntityDefault, FileEntity, StringEntity} from "./transport/core/Entity";
-import {EventListener, Listener, PathListener, PipelineListener, SimpleListener} from "./transport/core/Listener";
 import type {RouteSelector} from "./transport/core/RouteSelector";
 import type {IoBiConsumer} from "./transport/core/Typealias";
 import type {Session} from "./transport/core/Session";
@@ -16,6 +14,14 @@ import {ServerConfig} from "./transport/server/ServerConfig";
 import {Server} from "./transport/server/Server";
 import {BrokerListener} from "./broker/BrokerListener";
 import {BrokerFragmentHandler} from "./broker/BrokerFragmentHandler";
+import {EventListener} from "./transport/core/listener/EventListener";
+import {Listener} from "./transport/core/Listener";
+import {PathListener} from "./transport/core/listener/PathListener";
+import {PipelineListener} from "./transport/core/listener/PipelineListener";
+import {SimpleListener} from "./transport/core/listener/SimpleListener";
+import {EntityDefault} from "./transport/core/entity/EntityDefault";
+import {FileEntity} from "./transport/core/entity/FileEntity";
+import {StringEntity} from "./transport/core/entity/StringEntity";
 
 export class SocketD {
     /**
@@ -28,12 +34,19 @@ export class SocketD {
 
     static {
         const provider = new WsProvider();
-        for (const s of provider.schemas()) {
-            this.clientProviderMap.set(s, provider);
-        }
+        SocketD.registerClientProvider(provider);
+        SocketD.registerServerProvider(provider);
+    }
 
-        for (const s of provider.schemas()) {
-            this.serverProviderMap.set(s, provider);
+    static registerClientProvider(clientProvider: ClientProvider) {
+        for (let s of clientProvider.schemas()) {
+            SocketD.clientProviderMap.set(s, clientProvider);
+        }
+    }
+
+    static registerServerProvider(serverProvider: ServerProvider) {
+        for (let s of serverProvider.schemas()) {
+            SocketD.serverProviderMap.set(s, serverProvider);
         }
     }
 
@@ -41,7 +54,14 @@ export class SocketD {
      * 框架版本号
      */
     static version(): string {
-        return "2.4.14";
+        return "2.5.11";
+    }
+
+    /**
+     * 协议名
+     */
+    static protocolName(): string {
+        return "Socket.D";
     }
 
     /**
@@ -130,14 +150,14 @@ export class SocketD {
     static newEntity(data?: string | Blob | ArrayBuffer): EntityDefault {
         if (!data) {
             return new EntityDefault();
-        } else if (data instanceof File) {
+        } else if (typeof (File) != 'undefined' && data instanceof File) {
             return new FileEntity(data);
-        } else if (data instanceof ArrayBuffer) {
+        } else if (typeof (ArrayBuffer) != 'undefined' && data instanceof ArrayBuffer) {
             return new EntityDefault().dataSet(data);
-        } else if (data instanceof Blob) {
+        } else if (typeof (Blob) != 'undefined' && data instanceof Blob) {
             return new EntityDefault().dataSet(data);
         } else {
-            return new StringEntity(data.toString());
+            return new StringEntity(String(data));
         }
     }
 

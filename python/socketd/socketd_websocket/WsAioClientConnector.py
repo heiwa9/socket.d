@@ -1,8 +1,10 @@
 import asyncio
 from typing import Optional
 
+from websockets import Subprotocol
 from websockets.client import WebSocketClientProtocol
 
+from socketd import SocketD
 from socketd.exception.SocketDExecption import SocketDTimeoutException
 from socketd.transport.client.Client import ClientInternal
 from socketd.transport.client.ClientHandshakeResult import ClientHandshakeResult
@@ -38,16 +40,27 @@ class WsAioClientConnector(ClientConnectorBase):
         self._top = AsyncUtils.run_forever(self._loop, daemon=True)
 
         try:
-            self.__con: AIOConnect = AIOConnect(uri=ws_url,
-                                                client=self.client,
-                                                ssl=self.client.get_config().get_ssl_context(),
-                                                create_protocol=AIOWebSocketClientImpl,
-                                                ping_timeout=self.client.get_config().get_idle_timeout() / 1000,
-                                                ping_interval=self.client.get_config().get_idle_timeout() / 1000,
-                                                logger=logger,
-                                                max_size=Constants.MAX_SIZE_FRAME,
-                                                message_loop=self._loop
-                                                )
+            if self.client.get_config().is_use_subprotocols():
+                self.__con: AIOConnect = AIOConnect(uri=ws_url,
+                                                    client=self.client,
+                                                    ssl=self.client.get_config().get_ssl_context(),
+                                                    create_protocol=AIOWebSocketClientImpl,
+                                                    subprotocols=[Subprotocol(SocketD.protocol_name())],
+                                                    ping_timeout=self.client.get_config().get_idle_timeout() / 1000,
+                                                    ping_interval=self.client.get_config().get_idle_timeout() / 1000,
+                                                    logger=logger,
+                                                    max_size=Constants.MAX_SIZE_FRAME,
+                                                    message_loop=self._loop)
+            else:
+                self.__con: AIOConnect = AIOConnect(uri=ws_url,
+                                                    client=self.client,
+                                                    ssl=self.client.get_config().get_ssl_context(),
+                                                    create_protocol=AIOWebSocketClientImpl,
+                                                    ping_timeout=self.client.get_config().get_idle_timeout() / 1000,
+                                                    ping_interval=self.client.get_config().get_idle_timeout() / 1000,
+                                                    logger=logger,
+                                                    max_size=Constants.MAX_SIZE_FRAME,
+                                                    message_loop=self._loop)
 
             self.__real: AIOWebSocketClientImpl | WebSocketClientProtocol = await self.__con
             handshakeResult: ClientHandshakeResult = await self.__real.handshake_future.get(self.client.get_config().get_connect_timeout() / 1000)

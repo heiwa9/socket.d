@@ -20,6 +20,11 @@ public interface ClientSession extends Closeable {
     boolean isValid();
 
     /**
+     * 是否活跃
+     */
+    boolean isActive();
+
+    /**
      * 是否正在关闭中
      */
     boolean isClosing();
@@ -87,7 +92,7 @@ public interface ClientSession extends Closeable {
      * @deprecated 2.4
      */
     @Deprecated
-    default void closeStarting() throws IOException{
+    default void closeStarting() throws IOException {
         preclose();
     }
 
@@ -101,6 +106,10 @@ public interface ClientSession extends Closeable {
      */
     void close() throws IOException;
 
+    /**
+     * 关闭代码
+     */
+    int closeCode();
 
     /**
      * 手动重连（一般是自动）

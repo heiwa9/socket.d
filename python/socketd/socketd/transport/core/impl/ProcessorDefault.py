@@ -1,9 +1,12 @@
+import asyncio
 import traceback
 from abc import ABC
-from typing import Optional
+from typing import Optional, Callable, TypeVar
 
 from socketd.exception.SocketDExecption import SocketDAlarmException, SocketDConnectionException
+from socketd.transport.core.ChannelAssistant import ChannelAssistant
 from socketd.transport.core.ChannelInternal import ChannelInternal
+from socketd.transport.core.FrameIoHandler import FrameIoHandler
 from socketd.transport.core.HandshakeDefault import HandshakeDefault
 from socketd.transport.core.Message import Message
 from socketd.transport.core.Processor import Processor
@@ -16,8 +19,10 @@ from socketd.transport.core.listener.SimpleListener import SimpleListener
 from socketd.transport.stream.Stream import StreamInternal
 from socketd.utils.RunUtils import RunUtils
 
+S = TypeVar("S")
 
-class ProcessorDefault(Processor, ABC):
+# 协议处理器默认实现（原则上，写不要在读的线程上执行）
+class ProcessorDefault(Processor, FrameIoHandler, ABC):
 
     def __init__(self):
         self.listener = SimpleListener()
@@ -26,7 +31,23 @@ class ProcessorDefault(Processor, ABC):
         if listener is not None:
             self.listener = listener
 
-    async def on_receive(self, channel: ChannelInternal, frame):
+    async def send_frame(self, channel: ChannelInternal, frame: Frame, channelAssistant: ChannelAssistant[S], target: S):
+        def completionHandler(result:bool, throwable:Exception):
+            ...
+
+        await self.send_frame_handle(channel, frame, channelAssistant, target, completionHandler)
+
+    async def send_frame_handle(self, channel: ChannelInternal, frame: Frame, channelAssistant: ChannelAssistant[S],
+                          target: S, completionHandler:Callable[[bool, Exception], None]):
+        await channelAssistant.write(target, frame)
+
+        if frame.flag() >= Flags.Message:
+            await RunUtils.waitTry(self.listener.on_send(channel.get_session(), frame.message()))
+
+    async def reve_frame(self, channel: ChannelInternal, frame):
+        await self.reve_frame_handle(channel, frame)
+
+    async def reve_frame_handle(self, channel: ChannelInternal, frame: Frame):
         if channel.get_config().client_mode():
             log.debug(f"C-REV:{frame}")
         else:
@@ -72,7 +93,7 @@ class ProcessorDefault(Processor, ABC):
 
             try:
                 if frame.flag() == Flags.Ping:
-                    await channel.send_pong()
+                    RunUtils.taskTry(channel.send_pong())
                 elif frame.flag() == Flags.Pong:
                     pass
                 elif frame.flag() == Flags.Close:
@@ -87,14 +108,18 @@ class ProcessorDefault(Processor, ABC):
                     await self.on_close_internal(channel, code)
                 elif frame.flag() == Flags.Alarm:
                     e = SocketDAlarmException(frame.message())
+                    channel.set_alarm_code(e.get_alarm_code())
+
                     stream: StreamInternal = channel.get_config().get_stream_manger().get_stream(frame.message().sid())
 
                     if stream is None:
                         self.on_error(channel, e)
                     else:
                         channel.get_config().get_stream_manger().remove_stream(frame.message().sid())
-                        stream.on_error(e)
+                        RunUtils.taskTry(stream.on_error(e))
                 elif frame.flag() == Flags.Pressure:
+                    code = frame.message().meta_as_int("code")
+                    channel.set_alarm_code(code)
                     pass
                 elif frame.flag() in [Flags.Message, Flags.Request, Flags.Subscribe]:
                     await self.on_receive_do(channel, frame, False)
@@ -138,9 +163,9 @@ class ProcessorDefault(Processor, ABC):
         if isReply:
             if stream:
                 stream.on_progress(False, streamIndex, streamTotal)
-            await channel.retrieve(frame, stream)
+            await self.on_reply(channel, frame, stream)
         else:
-            self.on_message(channel, frame.message())
+            self.on_message(channel, frame)
 
     def on_open(self, channel: ChannelInternal):
         RunUtils.taskTry(self.on_open_do(channel))
@@ -154,19 +179,39 @@ class ProcessorDefault(Processor, ABC):
             log.warning(f"{channel.get_config().get_role_name()} channel listener onOpen error \n{e_msg}")
             channel.do_open_future(False, e)
 
-    def on_message(self, channel: ChannelInternal, message: Message):
-        RunUtils.taskTry(self.on_message_do(channel, message))
+    def on_message(self, channel: ChannelInternal, frame: Frame):
+        RunUtils.taskTry(self.on_message_do(channel, frame.message()))
 
     async def on_message_do(self, channel: ChannelInternal, message: Message):
         try:
-            await self.listener.on_message(channel.get_session(), message)
+            await RunUtils.waitTry(self.listener.on_message(channel.get_session(), message))
         except Exception as e:
             e_msg = traceback.format_exc()
             log.warning(f"{channel.get_config().get_role_name()} channel listener onMessage error \n{e_msg}")
             self.on_error(channel, e)
 
+    async def on_reply(self, channel: ChannelInternal, frame: Frame, stream: StreamInternal) -> None:
+        """接收（接收答复帧）"""
+        if stream is not None:
+            if stream.demands() < Constants.DEMANDS_MULTIPLE or frame.flag() == Flags.ReplyEnd:
+                # 如果是单收或者答复结束，则移除流接收器
+                channel.get_config().get_stream_manger().remove_stream(frame.message().sid())
+
+            if stream.demands() < Constants.DEMANDS_MULTIPLE:
+                # 单收时，内部已经是异步机制
+                await RunUtils.waitTry(stream.on_reply(frame.message()))
+                await RunUtils.waitTry(self.listener.on_reply(channel.get_session(), frame.message()))
+            else:
+                # 改为异步处理，避免卡死Io线程
+                asyncio.get_running_loop().run_in_executor(self.get_config().get_exchange_executor(),
+                                                           lambda _m: asyncio.run(stream.on_reply(_m)), frame.message())
+        else:
+            await RunUtils.waitTry(self.listener.on_reply(channel.get_session(), frame.message()))
+            log.debug(
+                f"{channel.get_config().get_role_name()} stream not found, sid={frame.message().sid()}, sessionId={channel.get_session().session_id()}")
+
     def on_close(self, channel: ChannelInternal):
-        if channel.is_closed() <= Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING:
+        if channel.close_code() <= Constants.CLOSE1000_PROTOCOL_CLOSE_STARTING:
             RunUtils.taskTry(self.on_close_internal(channel, Constants.CLOSE2003_DISCONNECTION))
 
     async def on_close_internal(self, channel: ChannelInternal, code: int):

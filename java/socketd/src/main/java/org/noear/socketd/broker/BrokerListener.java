@@ -1,7 +1,10 @@
 package org.noear.socketd.broker;
 
+import org.noear.socketd.exception.SocketDException;
 import org.noear.socketd.transport.core.*;
+import org.noear.socketd.transport.core.entity.MessageBuilder;
 import org.noear.socketd.utils.RunUtils;
+import org.noear.socketd.utils.SessionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +18,7 @@ import java.util.Collection;
  * @author noear
  * @since 2.1
  */
-public class BrokerListener extends BrokerListenerBase implements Listener {
+public class BrokerListener extends BrokerListenerBase implements Listener, BroadcastBroker {
     protected static final Logger log = LoggerFactory.getLogger(BrokerListener.class);
 
     @Override
@@ -32,11 +35,19 @@ public class BrokerListener extends BrokerListenerBase implements Listener {
 
     @Override
     public void onMessage(Session requester, Message message) throws IOException {
+        onMessageDo(requester, message);
+    }
+
+    protected void onMessageDo(Session requester, Message message) throws IOException {
         String atName = message.atName();
 
         if (atName == null) {
-            requester.sendAlarm(message, "Broker message require '@' meta");
-            return;
+            if (requester != null) {
+                requester.sendAlarm(message, "Broker message require '@' meta");
+                return;
+            } else {
+                throw new SocketDException("Broker message require '@' meta");
+            }
         }
 
         if (atName.equals("*")) {
@@ -52,7 +63,11 @@ public class BrokerListener extends BrokerListenerBase implements Listener {
             atName = atName.substring(0, atName.length() - 1);
 
             if (forwardToName(requester, message, atName) == false) {
-                requester.sendAlarm(message, "Broker don't have '@" + atName + "' player");
+                if (requester != null) {
+                    requester.sendAlarm(message, "Broker don't have '@" + atName + "' player");
+                } else {
+                    throw new SocketDException("Broker don't have '@" + atName + "' player");
+                }
             }
         } else {
             //单发模式（给同名的某个玩家，轮询负截均衡）
@@ -62,9 +77,27 @@ public class BrokerListener extends BrokerListenerBase implements Listener {
                 //转发消息
                 forwardToSession(requester, message, responder);
             } else {
-                requester.sendAlarm(message, "Broker don't have '@" + atName + "' session");
+                if (requester != null) {
+                    requester.sendAlarm(message, "Broker don't have '@" + atName + "' session");
+                } else {
+                    throw new SocketDException("Broker don't have '@" + atName + "' session");
+                }
             }
         }
+    }
+
+    /**
+     * 广播
+     *
+     * @param event  事件
+     * @param entity 实体（转发方式 https://socketd.noear.org/article/737 ）
+     */
+    @Override
+    public void broadcast(String event, Entity entity) throws IOException{
+        onMessageDo(null, new MessageBuilder()
+                .flag(Flags.Message)
+                .event(event)
+                .entity(entity).build());
     }
 
     /**
@@ -103,20 +136,31 @@ public class BrokerListener extends BrokerListenerBase implements Listener {
      * @param responder 目标玩家会话
      */
     public void forwardToSession(Session requester, Message message, Session responder) throws IOException {
+        forwardToSession(requester, message, responder, -1);
+    }
+
+    /**
+     * 转发消息
+     *
+     * @param requester 请求玩家
+     * @param message   消息
+     * @param responder 目标玩家会话
+     */
+    public void forwardToSession(Session requester, Message message, Session responder, long timeout) throws IOException {
         if (message.isRequest()) {
-            responder.sendAndRequest(message.event(), message, -1).thenReply(reply -> {
-                if (requester.isValid()) {
+            responder.sendAndRequest(message.event(), message, timeout).thenReply(reply -> {
+                if (SessionUtils.isValid(requester)) {
                     requester.reply(message, reply);
                 }
             }).thenError(err -> {
                 //传递异常
-                if (requester.isValid()) {
+                if (SessionUtils.isValid(requester)) {
                     RunUtils.runAndTry(() -> requester.sendAlarm(message, err.getMessage()));
                 }
             });
         } else if (message.isSubscribe()) {
-            responder.sendAndSubscribe(message.event(), message).thenReply(reply -> {
-                if (requester.isValid()) {
+            responder.sendAndSubscribe(message.event(), message, timeout).thenReply(reply -> {
+                if (SessionUtils.isValid(requester)) {
                     if (reply.isEnd()) {
                         requester.replyEnd(message, reply);
                     } else {
@@ -125,7 +169,7 @@ public class BrokerListener extends BrokerListenerBase implements Listener {
                 }
             }).thenError(err -> {
                 //传递异常
-                if (requester.isValid()) {
+                if (SessionUtils.isValid(requester)) {
                     RunUtils.runAndTry(() -> requester.sendAlarm(message, err.getMessage()));
                 }
             });

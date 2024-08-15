@@ -1,6 +1,7 @@
 package org.noear.socketd.transport.core;
 
 import org.noear.socketd.transport.client.ClientSession;
+import org.noear.socketd.transport.core.entity.StringEntity;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -23,6 +24,11 @@ public interface Session extends ClientSession, Closeable {
      * 获取本地地址
      */
     InetSocketAddress localAddress() throws IOException;
+
+    /**
+     * 通道配置
+     * */
+    Config config();
 
     /**
      * 获取握手信息
@@ -99,6 +105,13 @@ public interface Session extends ClientSession, Closeable {
     <T> Session attrPut(String name, T value);
 
     /**
+     * 删除属性
+     *
+     * @param name  名字
+     */
+    <T> Session attrDel(String name);
+
+    /**
      * 是否有效
      */
     boolean isValid();
@@ -131,7 +144,22 @@ public interface Session extends ClientSession, Closeable {
     /**
      * 发送告警
      */
-    void sendAlarm(Message from, String alarm) throws IOException;
+    void sendAlarm(Message from, Entity alarm) throws IOException;
+
+    /**
+     * 发送告警
+     *
+     * @deprecated
+     */
+    @Deprecated
+    default void sendAlarm(Message from, String alarm) throws IOException {
+        sendAlarm(from, new StringEntity(alarm));
+    }
+
+    /**
+     * 发送压力
+     * */
+    void sendPressure(Message from, Entity pressure) throws IOException;
 
     /**
      * 答复

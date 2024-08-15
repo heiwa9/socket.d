@@ -10,7 +10,6 @@ import org.noear.solon.test.SolonTest;
  * @author noear
  * @since 2.0
  */
-@ExtendWith(SolonJUnit5Extension.class)
 @SolonTest
 public class CaseTest {
     static final String[] schemas = new String[]{
@@ -529,6 +528,61 @@ public class CaseTest {
             String s1 = schemas[i];
 
             BaseTestCase testCase = new TestCase39_serverCloseSelf(s1, 3900 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase41_memoryLimit() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            BaseTestCase testCase = new TestCase41_memoryLimit(s1, 4100 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase42_broadcastBroker() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            if (s1.contains("udp") || s1.contains("kcp")) {
+                continue;
+            }
+
+            BaseTestCase testCase = new TestCase42_broadcastBroker(s1, 4200 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase44_semaphore() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            BaseTestCase testCase = new TestCase44_semaphore(s1, 4400 + i);
             try {
                 testCase.start();
                 testCase.stop();

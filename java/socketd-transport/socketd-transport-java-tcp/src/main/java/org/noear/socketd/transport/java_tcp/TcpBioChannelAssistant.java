@@ -1,11 +1,9 @@
 package org.noear.socketd.transport.java_tcp;
 
-import org.noear.socketd.transport.core.ChannelAssistant;
-import org.noear.socketd.transport.core.Config;
-import org.noear.socketd.transport.core.Constants;
-import org.noear.socketd.transport.core.Frame;
+import org.noear.socketd.transport.core.*;
 import org.noear.socketd.transport.core.codec.ByteBufferCodecReader;
 import org.noear.socketd.transport.core.codec.ByteBufferCodecWriter;
+import org.noear.socketd.utils.IoCompletionHandler;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -50,13 +48,17 @@ public class TcpBioChannelAssistant implements ChannelAssistant<Socket> {
     }
 
     @Override
-    public void write(Socket source, Frame frame) throws IOException {
-        OutputStream output = source.getOutputStream();
-//        config.getCodec().write(frame, i -> new OutputStreamBufferWriter(output));
-//        output.flush();
-        ByteBuffer buffer = config.getCodec().write(frame, (i) -> new ByteBufferCodecWriter(ByteBuffer.allocate(i))).getBuffer();
-        output.write(buffer.array());
-        output.flush();
+    public void write(Socket source, Frame frame, ChannelInternal channel, IoCompletionHandler completionHandler) {
+        try {
+            OutputStream output = source.getOutputStream();
+            ByteBuffer buffer = config.getCodec().write(frame, (i) -> new ByteBufferCodecWriter(ByteBuffer.allocate(i))).getBuffer();
+            output.write(buffer.array());
+            output.flush();
+
+            completionHandler.completed(true, null);
+        } catch (Throwable e) {
+            completionHandler.completed(false, e);
+        }
     }
 
     public Frame read(Socket source) throws IOException {

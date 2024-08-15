@@ -1,3 +1,29 @@
+### 2.5.10
+* 添加 websocket 子协议验证开关控制
+
+### 2.5.6
+* 优化 Session::send_alarm 申明，支持 alarm: str|Entity
+
+### 2.5.4
+* 添加 Listener:onReply, onSend 方法，方便帧流量统计
+* 添加 FrameIoHandler 接口，强化 Processor 的帧输入输出强控地位
+
+### 2.5.2
+* 添加 SessionUtils 工具类
+* 添加 Session::isActive()
+* 添加 BroadcastBroker 接口（提供类似 stomp 的体验）
+
+### 2.5.0
+* 添加 websocket 适配子协议验证（避免乱连）
+
+### 2.4.17
+* 添加 EntityMetas.META_X_UNLIMITED
+
+### 2.4.15
+* 修复 stream.on_reply 非异步调用出错的问题
+* 优化 流的超时处理
+* 调整 语言版本需求改为 3.10
+
 ### 2.4.14
 * 修复 EventListener:on_open 错误
 * 优化 RequestStreamImpl 协程处理处理

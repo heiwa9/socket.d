@@ -29,6 +29,13 @@ public abstract class BrokerListenerBase {
     }
 
     /**
+     * 获取特定会话
+     */
+    public Session getSessionById(String sessionId) {
+        return sessionAll.get(sessionId);
+    }
+
+    /**
      * 获取任意会话（包括没有名字的）
      */
     public Session getSessionAny(){
@@ -100,7 +107,7 @@ public abstract class BrokerListenerBase {
             String x_hash = null;
 
             if(message != null){
-                x_hash = message.meta(EntityMetas.META_X_Hash);
+                x_hash = message.meta(EntityMetas.META_X_HASH);
             }
 
             if (StrUtils.isEmpty(x_hash)) {

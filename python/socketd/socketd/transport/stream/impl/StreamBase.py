@@ -7,16 +7,18 @@ from socketd.transport.core.Message import MessageInternal
 from socketd.transport.stream.Stream import StreamInternal
 from socketd.transport.stream.StreamManger import StreamManger
 from socketd.utils.CompletableFuture import CompletableFuture
+from socketd.utils.LogConfig import log
 from socketd.utils.RunUtils import RunUtils
 
 
 class StreamBase(StreamInternal, ABC):
-    """流接收器基类"""
-
-    def __init__(self, sid: str, demands: int, timeout: int):
-        self.__sid = sid
-        self.__timeout = timeout
-        self.__demands = demands
+    """流接收器基类
+    :param timeout: 超时（毫秒）
+    """
+    def __init__(self, sid: str, demands: int, timeout: float):
+        self.__sid:str = sid
+        self.__timeout:float = timeout
+        self.__demands:int = demands
 
         self.__doOnError: Callable[[Exception], None] = None
         self.__doOnProgress: Callable[[bool, int, int], None] = None
@@ -38,7 +40,7 @@ class StreamBase(StreamInternal, ABC):
     def demands(self) -> int:
         return self.__demands
 
-    def timeout(self):
+    def timeout(self) ->float:
         return self.__timeout
 
     # 保险开始（避免永久没有回调，造成内存不能释放）
@@ -63,8 +65,10 @@ class StreamBase(StreamInternal, ABC):
         ...
 
     def on_error(self, error: Exception):
-        if error and self.__doOnError:
+        if self.__doOnError:
             RunUtils.taskTry(self.__doOnError(error))
+        else:
+            log.debug(f"The stream error, sid={self.sid()}", error)
 
     def on_progress(self, is_send, val, max_val):
         if self.__doOnProgress:

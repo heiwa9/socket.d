@@ -4,6 +4,8 @@ import java.util.concurrent.*;
 import java.util.function.Supplier;
 
 /**
+ * 运行工具
+ *
  * @author noear
  * @since 2.0
  */
@@ -22,17 +24,17 @@ public class RunUtils {
     private static ScheduledExecutorService scheduledExecutor;
 
     static {
-        singleExecutor = Executors.newSingleThreadExecutor(new NamedThreadFactory("Socketd-singleExecutor-"));
+        singleExecutor = Executors.newSingleThreadExecutor(new NamedThreadFactory("Socketd-singleExecutor-").daemon(true));
 
         int asyncPoolSize = Math.max(Runtime.getRuntime().availableProcessors(), 2);
         asyncExecutor = new ThreadPoolExecutor(asyncPoolSize, asyncPoolSize,
                 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<Runnable>(),
-                new NamedThreadFactory("Socketd-asyncExecutor-"));
+                new NamedThreadFactory("Socketd-asyncExecutor-").daemon(true));
 
         int scheduledPoolSize = 2;
         scheduledExecutor = new ScheduledThreadPoolExecutor(scheduledPoolSize,
-                new NamedThreadFactory("Socketd-scheduledExecutor-"));
+                new NamedThreadFactory("Socketd-scheduledExecutor-").daemon(true));
     }
 
     public static void setScheduledExecutor(ScheduledExecutorService scheduledExecutor) {
@@ -43,6 +45,9 @@ public class RunUtils {
         }
     }
 
+    public static ScheduledExecutorService getScheduledExecutor() {
+        return scheduledExecutor;
+    }
 
     public static void setAsyncExecutor(ExecutorService asyncExecutor) {
         if (asyncExecutor != null) {
@@ -63,7 +68,7 @@ public class RunUtils {
     /**
      * 异步执行（单线程）
      */
-    public static CompletableFuture<Void> single(Runnable task){
+    public static CompletableFuture<Void> single(Runnable task) {
         return CompletableFuture.runAsync(task, singleExecutor);
     }
 
@@ -117,5 +122,12 @@ public class RunUtils {
      */
     public static ScheduledFuture<?> scheduleWithFixedDelay(Runnable task, long initialDelay, long millisDelay) {
         return scheduledExecutor.scheduleWithFixedDelay(task, initialDelay, millisDelay, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 获取毫秒数（基于 nano）
+     */
+    public static long milliSecondFromNano() {
+        return System.nanoTime() / 1000000L;
     }
 }
