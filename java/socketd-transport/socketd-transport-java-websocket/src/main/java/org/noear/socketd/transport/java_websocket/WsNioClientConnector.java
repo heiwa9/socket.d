@@ -44,7 +44,7 @@ public class WsNioClientConnector extends ClientConnectorBase<WsNioClient> {
 
         //闲置超时
         if (client.getConfig().getIdleTimeout() > 0L) {
-            //单位：毫秒
+            //单位：秒
             real.setConnectionLostTimeout((int) (client.getConfig().getIdleTimeout() / 1000L));
         }
 
@@ -77,7 +77,7 @@ public class WsNioClientConnector extends ClientConnectorBase<WsNioClient> {
     @Override
     public void close() {
         try {
-            if(real != null && real.isOpen()) {
+            if (real != null && real.isOpen()) {
                 real.close();
             }
         } catch (Throwable e) {

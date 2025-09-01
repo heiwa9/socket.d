@@ -2,8 +2,6 @@ package features;
 
 import features.cases.*;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.noear.solon.test.SolonJUnit5Extension;
 import org.noear.solon.test.SolonTest;
 
 /**
@@ -16,7 +14,7 @@ public class CaseTest {
             "sd:tcp-java",
             "sd:tcp-netty",
             "sd:tcp-smartsocket",
-//            "sd:tcp-neta",
+            "sd:tcp-neta",
             "sd:ws-java",
             "sd:udp-java",
             "sd:udp-netty",
@@ -240,6 +238,27 @@ public class CaseTest {
             String s1 = schemas[i];
 
             BaseTestCase testCase = new TestCase21_sendAndSubscribe2rep(s1, 2100 + i);
+            try {
+                testCase.start();
+                testCase.stop();
+            } catch (Exception e) {
+                testCase.onError();
+                e.printStackTrace();
+                assert false;
+            }
+        }
+    }
+
+    @Test
+    public void TestCase22_ssl() throws Exception {
+        for (int i = 0; i < schemas.length; i++) {
+            String s1 = schemas[i];
+
+            if (s1.contains("udp") || s1.contains("kcp")) {
+                continue;
+            }
+
+            BaseTestCase testCase = new TestCase22_ssl(s1, 2200 + i);
             try {
                 testCase.start();
                 testCase.stop();

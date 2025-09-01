@@ -61,6 +61,10 @@ public class ServerMessageProcessor extends AbstractMessageProcessor<Frame> {
                 ChannelDefaultEx c = s.getAttachment();
                 if (c != null) {
                     server.getProcessor().onError(c, e);
+
+                    if (c.getHandshake() != null) {
+                        server.getProcessor().onClose(c);
+                    }
                 }
                 break;
             }

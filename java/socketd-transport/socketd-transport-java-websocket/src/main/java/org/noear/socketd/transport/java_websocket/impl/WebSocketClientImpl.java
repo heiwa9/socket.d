@@ -44,8 +44,18 @@ public class WebSocketClientImpl extends WebSocketClient {
 
     @Override
     public void onWebsocketPing(WebSocket conn, Framedata f) {
-        //用于支持 socket.d 控制 idleTimeout //关闭自动 ping->Pong
-        //super.onWebsocketPing(conn, f);
+        //避免 ws（非 sd:ws） 假连
+        if (checkClientHandshake()) {
+            super.onWebsocketPing(conn, f);
+        }
+    }
+
+    @Override
+    public void onWebsocketPong(WebSocket conn, Framedata f) {
+        //避免 ws（非 sd:ws） 假连
+        if (checkClientHandshake()) {
+            super.onWebsocketPong(conn, f);
+        }
     }
 
     @Override
@@ -118,5 +128,16 @@ public class WebSocketClientImpl extends WebSocketClient {
     @Override
     public void onError(Exception e) {
         client.getProcessor().onError(channel, e);
+    }
+
+    /**
+     * 禁止 ws 客户端连接 sd:ws 服务（避免因为 ws 心跳，又不会触发空闲超时）
+     */
+    protected boolean checkClientHandshake() {
+        if (channel == null || channel.getHandshake() == null) {
+            return false;
+        } else {
+            return true;
+        }
     }
 }

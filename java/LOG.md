@@ -1,3 +1,29 @@
+### 2.5.18
+* 修复 socketd-transport-java-websocket(client) 不能与 py socketd-transport-websocket(server) 互联的问题
+
+### 2.5.17
+* 优化 兼容未握手的异常处理
+
+### 2.5.16
+
+* 修复 握手未成功时出错时，会造成 null 异常的问题
+* 修复 socketd-transport-smartsocket 被恶意刷包时，可能会 oom 的问题
+
+### 2.5.15
+* netty 升为 4.1.118.Final
+
+### 2.5.14
+* smartsocket 升为 1.5.55
+* netty 升为 4.1.115.Final
+* slf4j 升为 2.0.16
+
+### 2.5.13
+* smartsocket 升为 1.5.54
+* java-websocket 升为 1.5.7
+
+### 2.5.12
+* smartsocket 升为 1.5.52
+
 ### 2.5.10
 * 添加 websocket 子协议验证开关控制
 * smartsocket 升为 1.5.50
